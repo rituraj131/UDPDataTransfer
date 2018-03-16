@@ -4,7 +4,6 @@
 int main(int argc, char **argv) {
 	if (argc != 8) {
 		cout << "Wrong Number of input parameters! Exiting..." << endl;
-		system("pause");
 		return 0;
 	}
 
@@ -16,7 +15,7 @@ int main(int argc, char **argv) {
 	float lossProbabReverse = atof(argv[6]);
 	int bottleNeckSpeed = atoi(argv[7]);
 
-	printf("Main:\tsender W= %d, RTT %0.3f sec, loss %f / %f, link %d Mbps\n", senderWindow, RTT, lossProbabForward, lossProbabReverse, bottleNeckSpeed);
+	printf("Main:\tsender W= %d, RTT %g sec, loss %g / %g, link %d Mbps\n", senderWindow, RTT, lossProbabForward, lossProbabReverse, bottleNeckSpeed);
 	printf("Main:\tinitializing DWORD array with 2^%d elements...", power);
 
 	DWORD time = timeGetTime();
@@ -27,8 +26,16 @@ int main(int argc, char **argv) {
 
 	printf("done in %d ms\n", timeGetTime() - time);
 
-	//SenderSocket ss;
+	WSADATA wsaData;
 
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		cout << "WSAStartup failed with error : " << WSAGetLastError() << endl;
+		WSACleanup();
+		return 0;
+	}
+
+	SenderSocket ss;
+	WSACleanup();
 	system("pause");
 	return 0;
 }
