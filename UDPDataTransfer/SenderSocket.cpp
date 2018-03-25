@@ -14,7 +14,7 @@ SenderSocket::SenderSocket()
 	}
 }
 
-int SenderSocket::OpenTrial(char *host, int port_no, int senderWindow, LinkProperties *lp) {
+int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties *lp) {
 	printf("OpenTrial called, with host %s\n", host);
 
 	struct sockaddr_in local;
@@ -65,8 +65,6 @@ int SenderSocket::OpenTrial(char *host, int port_no, int senderWindow, LinkPrope
 	server.sin_family = AF_INET;
 	server.sin_port = htons(port_no);
 
-	int attemptCount = 0;
-
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
 	SenderSynHeader senderSyncHeader;
 	senderSyncHeader.sdh.flags.SYN = 1;
@@ -75,32 +73,51 @@ int SenderSocket::OpenTrial(char *host, int port_no, int senderWindow, LinkPrope
 
 	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
 	
-	int send_res = sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server, sizeof(struct sockaddr_in));
+	char *answBuf = new char[sizeof(ReceiverHeader)];
 	
-	printf("sendto_res: %d\n", send_res);
-	if (send_res == SOCKET_ERROR) {
-		printf("failure in sendto error %d\n", WSAGetLastError());
-		return FAILED_SEND;
-	}
-
 	fd_set sockHolder;
 	FD_ZERO(&sockHolder);
 	FD_SET(sock, &sockHolder);
 
-	// set timeout to 10 seconds 
 	struct timeval timeout;
 	timeout.tv_sec = 2;
 	timeout.tv_usec = 0;
-	
-	int selectRes = select(0, &sockHolder, NULL, NULL, &timeout);
-	printf("selectRes %d\n", selectRes);
 
-	//char *answBuf = new char[sizeof(ReceiverHeader)];
+	int attemptCount = 0;
+
+	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
+		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server,
+			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
+			printf("failure in sendto error %d\n", WSAGetLastError());
+			return FAILED_SEND;
+		}
+
+		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
+			struct sockaddr_in response;
+			memset(&response, 0, sizeof(response));
+			response.sin_family = AF_INET;
+			response.sin_port = htons(port_no);
+			response.sin_addr.s_addr = server.sin_addr.S_un.S_addr;
+			int response_size = sizeof(response);
+
+			int recv_res;
+			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+				(struct sockaddr*)&response, &response_size)) == SOCKET_ERROR) {
+				printf("Socket Error %d... Exiting!\n\n", WSAGetLastError());
+				//TODO: check what code should be returned
+				return -1;
+			}
+
+			printf("recv_res: %d\n", recv_res);
+			return 0;
+		}
+	}
+	
 	return 1;
 }
 
 
-int SenderSocket::open(const char *host, int port_no, int senderWindow, LinkProperties *lp) {
+int open_old(const char *host, int port_no, int senderWindow, LinkProperties *lp) {
 	printf("Open called, with host %s\n", host);
 
 	//struct hostent *remote;
@@ -138,15 +155,8 @@ int SenderSocket::open(const char *host, int port_no, int senderWindow, LinkProp
 	server.sin_family = AF_INET;
 	server.sin_port = htons(0);
 	server.sin_addr.s_addr = inet_addr(host);
-	//inet_pton(AF_INET, host, &server.sin_addr);
-	//server.sin_addr.s_addr = inet_addr(host);
 	
-	/*struct sockaddr_in local;
-	memset(&local, 0, sizeof(local));
-	local.sin_family = AF_INET;
-	local.sin_addr.s_addr = INADDR_ANY;
-	local.sin_port = htons(port_no);*/
-
+	SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);;
 	if (bind(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
 		cout << "Binder failed! " << WSAGetLastError()<<endl;
 		//TODO: do something here
@@ -154,7 +164,6 @@ int SenderSocket::open(const char *host, int port_no, int senderWindow, LinkProp
 	}
 
 	printf("bind successful\n");
-
 
 	int attemptCount = 0;
 

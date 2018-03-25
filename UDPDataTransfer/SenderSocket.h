@@ -22,8 +22,8 @@ class SenderSocket
 	SOCKET sock;
 public:
 	SenderSocket();
-	int open(const char *, int, int, LinkProperties *);
-	int OpenTrial(char *, int, int, LinkProperties *);
+	//int open(const char *, int, int, LinkProperties *);
+	int Open(char *, int, int, LinkProperties *);
 	~SenderSocket();
 };
 

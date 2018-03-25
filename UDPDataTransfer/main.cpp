@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 	SenderSocket ss;
 	int status;
 
-	if ((status = ss.OpenTrial(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
+	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		//print error and return
 	}
 
