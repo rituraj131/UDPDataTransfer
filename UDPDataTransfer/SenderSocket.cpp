@@ -92,14 +92,16 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 		printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
 			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);
 
+		DWORD sendToTime = timeGetTime();
+
 		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server,
 			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
 
-		timeout.tv_sec = RTO;
-		timeout.tv_usec = 0;
+		//timeout.tv_sec = RTO;
+		timeout.tv_usec = RTO * 1000000;
 		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
 			int response_size = sizeof(server);
 
@@ -113,9 +115,10 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
 			memcpy(&sock_server, &server, sizeof(struct sockaddr_in));
-			//RTO = timeGetTime() - time;
-			//TODO: update RTO
-			printf("[%0.3f] <-- SYN-ACK %d window %d; setting initial RTO to 0.3f\n", (float)(timeGetTime() - time) / 1000,
+
+			RTO = 3.0f * (float)(timeGetTime() - sendToTime)/1000;
+
+			printf("[%0.3f] <-- SYN-ACK %d window %d; setting initial RTO to %0.3f\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd, RTO);
 			return STATUS_OK;
 		}
@@ -185,8 +188,8 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 			return FAILED_SEND;
 		}
 
-		timeout.tv_sec = RTO;
-		timeout.tv_usec = 0;
+		//timeout.tv_sec = RTO;
+		timeout.tv_usec = RTO * 1000000;
 		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
 			int response_size = sizeof(sock_server);
 
