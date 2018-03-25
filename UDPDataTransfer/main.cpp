@@ -47,6 +47,8 @@ int main(int argc, char **argv) {
 
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
+		WSACleanup();
+		system("pause");
 		return 0;
 	}
 
@@ -54,9 +56,27 @@ int main(int argc, char **argv) {
 		(float)(timeGetTime() - time)/1000, MAX_PKT_SIZE);
 	time = timeGetTime();
 
-	if ((status = ss.Close(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
+	char *charBuf = (char*)dwordBuf; // this buffer goes into socket
+	UINT64 byteBufferSize = dwordBufSize << 2; // convert to bytes
+
+	UINT64 off = 0; // current position in buffer
+	/*while (off < byteBufferSize)
+	{
+		// decide the size of next chunk
+		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
+		// send chunk into socket 
+		if ((status = ss.Send(charBuf + off, bytes)) != STATUS_OK) {
+			printf("Main:\tsend failed with status %d\n", status);
+			WSACleanup();
+			system("pause");
+			return 0;
+		}
+		off += bytes;
+	}*/
+
+	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
-		system("pause");
+		WSACleanup();
 		return 0;
 	}
 

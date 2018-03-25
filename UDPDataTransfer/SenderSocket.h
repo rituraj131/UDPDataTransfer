@@ -28,10 +28,12 @@ class SenderSocket
 	SOCKET sock;
 	float RTO;
 	DWORD time;
+	struct sockaddr_in sock_server;
 public:
 	SenderSocket();
 	int Open(char *, int, int, LinkProperties *);
-	int Close(char *, int, int, LinkProperties *);
+	int Close(int, LinkProperties *);
+	int Send(char *, int);
 	~SenderSocket();
 };
 
