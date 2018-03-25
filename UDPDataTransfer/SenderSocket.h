@@ -28,6 +28,7 @@ class SenderSocket
 	SOCKET sock;
 	float RTO;
 	DWORD time;
+	int send_seqnum;
 	struct sockaddr_in sock_server;
 public:
 	SenderSocket();

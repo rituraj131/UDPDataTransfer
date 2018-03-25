@@ -13,6 +13,7 @@ SenderSocket::SenderSocket()
 
 	RTO = 1.0f;
 	time = timeGetTime();
+	send_seqnum = 0;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
 }
 
@@ -121,6 +122,30 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	return TIMEOUT;
 }
 
+int SenderSocket::Send(char *buf, int bytes) {
+	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
+		return NOT_CONNECTED;
+	}
+
+	char *sendBuf = new char[MAX_PKT_SIZE];
+
+	SenderDataHeader senderDataHeader;
+	senderDataHeader.seq = send_seqnum;
+
+	memcpy(sendBuf, &senderDataHeader, sizeof(SenderDataHeader));
+
+	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
+
+	if (sendto(sock, (char *)sendBuf, sizeof(SenderSynHeader), 0, (struct sockaddr *)&sock_server,
+		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
+		printf("failed Send sendto with %d\n", WSAGetLastError());
+		return FAILED_SEND;
+	}
+
+	send_seqnum++;
+	return STATUS_OK;
+}
+
 
 int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
@@ -180,40 +205,6 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	}
 
 	return TIMEOUT;
-}
-
-int SenderSocket::Send(char *buf, int bytes) {
-	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
-		return NOT_CONNECTED;
-	}
-
-	char *sendBuf = new char[MAX_PKT_SIZE];
-	SenderDataHeader sdh, *sdhp = (SenderDataHeader *)sendBuf;
-	sdh.seq = 0;
-	memcpy(sdhp, &sdh, sizeof(SenderDataHeader));
-	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
-
-	fd_set sockHolder;
-	FD_ZERO(&sockHolder);
-	FD_SET(sock, &sockHolder);
-
-	struct timeval timeout;
-	timeout.tv_sec = RTO;
-	timeout.tv_usec = 0;
-
-	if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
-		if (sendto(sock, (char *)sendBuf, sizeof(SenderSynHeader), 0, (struct sockaddr *)&sock_server,
-			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
-			printf("failed sendto with %d\n", WSAGetLastError());
-			return FAILED_SEND;
-		}
-
-		return STATUS_OK;
-	}
-	else {
-		printf("timeout in send select\n");
-		return TIMEOUT;
-	}
 }
 
 SenderSocket::~SenderSocket()

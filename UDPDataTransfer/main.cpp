@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
 	float lossProbabReverse = atof(argv[6]);
 	int bottleNeckSpeed = atoi(argv[7]);
 
-	printf("Main:\tsender W= %d, RTT %g sec, loss %g / %g, link %d Mbps\n", senderWindow, RTT, lossProbabForward, lossProbabReverse, bottleNeckSpeed);
+	printf("Main:\tsender W= %d, RTT %0.3f sec, loss %g / %g, link %d Mbps\n", senderWindow, RTT, lossProbabForward, lossProbabReverse, bottleNeckSpeed);
 	printf("Main:\tinitializing DWORD array with 2^%d elements...", power);
 
 	DWORD time = timeGetTime();
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 	UINT64 byteBufferSize = dwordBufSize << 2; // convert to bytes
 
 	UINT64 off = 0; // current position in buffer
-	/*while (off < byteBufferSize)
+	while (off < byteBufferSize)
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
@@ -72,11 +72,12 @@ int main(int argc, char **argv) {
 			return 0;
 		}
 		off += bytes;
-	}*/
+	}
 
 	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
 		WSACleanup();
+		system("pause");
 		return 0;
 	}
 
