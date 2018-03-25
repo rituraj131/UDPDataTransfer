@@ -17,13 +17,21 @@
 #include "common.h"
 #include "TransferProp.h"
 
+//status of SYN
+#define SYN_STATUS_NONE 0
+#define SYN_STATUS_STARTED 1
+#define SYN_STATUS_COMPLETED_SUCCESSFULLY 2
+#define SYN_STATUS_FAILED 3
+
 class SenderSocket
 {
 	SOCKET sock;
+	float RTO;
+	DWORD time;
 public:
 	SenderSocket();
-	//int open(const char *, int, int, LinkProperties *);
 	int Open(char *, int, int, LinkProperties *);
+	int Close(char *, int, int, LinkProperties *);
 	~SenderSocket();
 };
 

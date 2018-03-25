@@ -39,13 +39,29 @@ int main(int argc, char **argv) {
 	lp.speed = 1e6 * atof(argv[7]); // convert to megabits
 	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
 	lp.pLoss[RETURN_PATH] = atof(argv[6]);
-	lp.bufferSize = senderWindow + 50;
+	lp.bufferSize = senderWindow + 50; //TODO: change hard cording of 50
 	SenderSocket ss;
 	int status;
 
+	time = timeGetTime();
+
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
-		//print error and return
+		printf("Main:\tconnect failed with status %d\n", status);
+		return 0;
 	}
+
+	printf("Main:\tconnected to %s in %0.3f sec, pkt size %d bytes\n", targetHost, 
+		(float)(timeGetTime() - time)/1000, MAX_PKT_SIZE);
+	time = timeGetTime();
+
+	if ((status = ss.Close(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
+		printf("Main:\tdisconnect failed with status %d\n", status);
+		system("pause");
+		return 0;
+	}
+
+	printf("Main:\ttransfer finished in %0.3f sec\n", (float)(timeGetTime() - time) / 1000);
+
 
 	WSACleanup();
 	system("pause");

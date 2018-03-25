@@ -1,7 +1,5 @@
 #include "SenderSocket.h"
 
-
-
 SenderSocket::SenderSocket()
 {
 	sock = socket(AF_INET, SOCK_DGRAM, 0); //TODO: check and may be remove IPPROTO_UDP 
@@ -12,10 +10,13 @@ SenderSocket::SenderSocket()
 		WSACleanup();
 		exit(-1);
 	}
+
+	RTO = 1.0f;
+	time = timeGetTime();
 }
 
 int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties *lp) {
-	printf("OpenTrial called, with host %s\n", host);
+	//TODO: check for Already_connected return case.
 
 	struct sockaddr_in local;
 	memset(&local, 0, sizeof(local));
@@ -24,12 +25,10 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	local.sin_port = htons(0);
 	local.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	if (bind(sock, (struct sockaddr*)&local, sizeof(local)) == SOCKET_ERROR) {
+	if (::bind(sock, (struct sockaddr*)&local, sizeof(local)) == SOCKET_ERROR) {
 		cout << "Binder failed! " << WSAGetLastError() << endl;
-		//TODO: do something here
 		return -1;
 	}
-	cout << "Bind success" << endl;
 
 	struct sockaddr_in server;
 	memset(&server, 0, sizeof(server));
@@ -43,10 +42,8 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	if (IP == INADDR_NONE)
 	{
 		// if not a valid IP, then do a DNS lookup
-		if ((remote = gethostbyname(host)) == NULL)
-		{
-			cout << "failed with " << WSAGetLastError() << endl;
-			return -1;
+		if ((remote = gethostbyname(host)) == NULL){
+			return INVALID_NAME;
 		}
 		else // take the first IP address and copy into sin_addr
 		{
@@ -68,6 +65,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
 	SenderSynHeader senderSyncHeader;
 	senderSyncHeader.sdh.flags.SYN = 1;
+	senderSyncHeader.sdh.flags.reserved = 0;
 	senderSyncHeader.sdh.seq = 0;
 	senderSyncHeader.lp = *lp;
 
@@ -80,62 +78,69 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	FD_SET(sock, &sockHolder);
 
 	struct timeval timeout;
-	timeout.tv_sec = 2;
-	timeout.tv_usec = 0;
 
 	int attemptCount = 0;
 
 	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
+		printf("[%0.3f] --> SYN %d (attempt %d of 3, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
+			senderSyncHeader.sdh.seq, attemptCount, RTO, address);
+
 		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server,
 			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
-			printf("failure in sendto error %d\n", WSAGetLastError());
+			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
 
+		timeout.tv_sec = RTO;
+		timeout.tv_usec = 0;
 		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
-			struct sockaddr_in response;
-			memset(&response, 0, sizeof(response));
-			response.sin_family = AF_INET;
-			response.sin_port = htons(port_no);
-			response.sin_addr.s_addr = server.sin_addr.S_un.S_addr;
-			int response_size = sizeof(response);
+			int response_size = sizeof(server);
 
 			int recv_res;
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
-				(struct sockaddr*)&response, &response_size)) == SOCKET_ERROR) {
-				printf("Socket Error %d... Exiting!\n\n", WSAGetLastError());
-				//TODO: check what code should be returned
-				return -1;
+				(struct sockaddr*)&server, &response_size)) == SOCKET_ERROR) {
+				printf("failed recvfrom with %d\n",WSAGetLastError());
+				return FAILED_RECV;
 			}
 
-			printf("recv_res: %d\n", recv_res);
-			return 0;
+			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+			if (receiverHeader->flags.ACK != 1) continue;
+			//RTO = timeGetTime() - time;
+			//TODO: update RTO
+			printf("[%0.3f] <-- SYN-ACK %d window %d; setting initial RTO to 0.3f\n", (float)(timeGetTime() - time) / 1000,
+				senderSyncHeader.sdh.seq, receiverHeader->recvWnd, RTO);
+			return STATUS_OK;
 		}
 	}
 	
-	return 1;
+	return TIMEOUT;
 }
 
 
-int open_old(const char *host, int port_no, int senderWindow, LinkProperties *lp) {
-	printf("Open called, with host %s\n", host);
+int SenderSocket::Close(char *host, int port_no, int senderWindow, LinkProperties *lp) {
+	//TODO: check for Already_connected return case.
 
-	//struct hostent *remote;
+	struct sockaddr_in local;
+	memset(&local, 0, sizeof(local));
+
+	local.sin_family = AF_INET;
+	local.sin_port = htons(0);
+	local.sin_addr.s_addr = htonl(INADDR_ANY);
+
 	struct sockaddr_in server;
 	memset(&server, 0, sizeof(server));
 
-	in_addr addr;
+	struct hostent *remote;
 	char *address;
+	in_addr addr;
 
-	/*DWORD IP = inet_addr(host);
+	DWORD IP = inet_addr(host);
 
 	if (IP == INADDR_NONE)
 	{
 		// if not a valid IP, then do a DNS lookup
-		if ((remote = gethostbyname(host)) == NULL)
-		{
-			cout << "failed with " << WSAGetLastError() << endl;
-			return -1;
+		if ((remote = gethostbyname(host)) == NULL) {
+			return INVALID_NAME;
 		}
 		else // take the first IP address and copy into sin_addr
 		{
@@ -149,78 +154,64 @@ int open_old(const char *host, int port_no, int senderWindow, LinkProperties *lp
 		// if a valid IP, directly drop its binary version into sin_addr
 		server.sin_addr.S_un.S_addr = IP;
 		address = host;
-	}*/
-	
-	// setup the port # and protocol type
-	server.sin_family = AF_INET;
-	server.sin_port = htons(0);
-	server.sin_addr.s_addr = inet_addr(host);
-	
-	SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);;
-	if (bind(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
-		cout << "Binder failed! " << WSAGetLastError()<<endl;
-		//TODO: do something here
-		return -1;
 	}
 
-	printf("bind successful\n");
+	server.sin_family = AF_INET;
+	server.sin_port = htons(port_no);
 
-	int attemptCount = 0;
+	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
+	SenderSynHeader senderSyncHeader;
+	senderSyncHeader.sdh.flags.FIN = 1;
+	senderSyncHeader.sdh.flags.reserved = 0;
+	senderSyncHeader.sdh.seq = 0;
+	senderSyncHeader.lp = *lp;
 
-	char *sendBuf = new char[sizeof(SenderSynHeader)];
-	SenderSynHeader ssh, *sshp = (SenderSynHeader *)sendBuf;
-	ssh.sdh.flags.SYN = 1;
-	ssh.sdh.seq = 0;
-	memcpy(&(ssh.lp), lp, sizeof(LinkProperties));
-
-	memcpy(sendBuf, &ssh, sizeof(SenderSynHeader));
+	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
 
 	char *answBuf = new char[sizeof(ReceiverHeader)];
 
+	fd_set sockHolder;
+	FD_ZERO(&sockHolder);
+	FD_SET(sock, &sockHolder);
+
+	struct timeval timeout;
+
+	int attemptCount = 0;
+
 	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
-		int sendto_res = sendto(sock, sendBuf, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server, sizeof(server));
-		printf("sendto_res: %d\n", sendto_res);
-		if (sendto_res == SOCKET_ERROR) {
-			printf("failure in sendto error %d\n", WSAGetLastError());
+		printf("[%0.3f] --> FIN %d (attempt %d of 3, RTO %0.3f)\n", (float)(timeGetTime() - time) / 1000,
+			senderSyncHeader.sdh.seq, attemptCount, RTO);
+
+		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server,
+			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
+			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
-		printf("sendto successful buf: %s\n", sendBuf);
-		fd_set sockHolder;
-		FD_ZERO(&sockHolder);
-		FD_SET(sock, &sockHolder);
 
-		// set timeout to 10 seconds 
-		struct timeval timeout;
-		timeout.tv_sec = 2; //TODO: change it to 10sec
+		timeout.tv_sec = RTO;
 		timeout.tv_usec = 0;
-
-		int selectRes = select(0, &sockHolder, NULL, NULL, &timeout);
-		printf("selectRes %d\n", selectRes);
-		if (selectRes > 0) {
-
-			struct sockaddr_in response;
-			memset(&response, 0, sizeof(response));
-			response.sin_family = AF_INET;
-			response.sin_port = htons(port_no);
-			response.sin_addr.s_addr = server.sin_addr.S_un.S_addr;
-			int response_size = sizeof(response);
+		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
+			int response_size = sizeof(server);
 
 			int recv_res;
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
-				(struct sockaddr*)&response, &response_size)) == SOCKET_ERROR) {
-				printf("Socket Error %d... Exiting!\n\n", WSAGetLastError());
-				//TODO: check what code should be returned
-				return -1;
+				(struct sockaddr*)&server, &response_size)) == SOCKET_ERROR) {
+				printf("failed recvfrom with %d\n", WSAGetLastError());
+				return FAILED_RECV;
 			}
 
-			printf("recv_res: %d\n", recv_res);
-			return 0;
+			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+			if (receiverHeader->flags.ACK != 1) continue;
+			//RTO = timeGetTime() - time;
+			//TODO: update RTO
+			printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
+				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);
+			return STATUS_OK;
 		}
 	}
 
-	return -1;
+	return TIMEOUT;
 }
-
 
 SenderSocket::~SenderSocket()
 {
