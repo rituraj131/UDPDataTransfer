@@ -46,6 +46,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	{
 		// if not a valid IP, then do a DNS lookup
 		if ((remote = gethostbyname(host)) == NULL){
+			printf("[%0.3f] --> target %s is invalid\n", (float)(timeGetTime() - time) / 1000, host);
 			return INVALID_NAME;
 		}
 		else // take the first IP address and copy into sin_addr
