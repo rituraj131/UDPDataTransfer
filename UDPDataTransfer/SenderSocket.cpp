@@ -2,7 +2,7 @@
 
 SenderSocket::SenderSocket()
 {
-	sock = socket(AF_INET, SOCK_DGRAM, 0); //TODO: check and may be remove IPPROTO_UDP 
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if (sock == INVALID_SOCKET) {
 		cout << "Socket initialization failed with error: " << WSAGetLastError() << endl;
@@ -66,6 +66,8 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 
 	server.sin_family = AF_INET;
 	server.sin_port = htons(port_no);
+
+	lp->bufferSize += MAX_SYN_ATTEMPT_COUNT;
 
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
 	SenderSynHeader senderSyncHeader;
@@ -152,7 +154,8 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 		return NOT_CONNECTED;
 	}
 
-	//TODO: check for Already_connected return case.
+	lp->bufferSize += MAX_FIN_ATTEMPT_COUNT;
+
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
 	SenderSynHeader senderSyncHeader;
 	senderSyncHeader.sdh.flags.FIN = 1;

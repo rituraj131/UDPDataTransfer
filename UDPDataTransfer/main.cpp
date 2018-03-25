@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 	lp.speed = 1e6 * atof(argv[7]); // convert to megabits
 	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
 	lp.pLoss[RETURN_PATH] = atof(argv[6]);
-	lp.bufferSize = senderWindow + 50; //TODO: change hard cording of 50
+	lp.bufferSize = senderWindow;
 	SenderSocket ss;
 	int status;
 
