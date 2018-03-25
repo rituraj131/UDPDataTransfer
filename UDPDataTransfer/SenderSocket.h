@@ -23,7 +23,7 @@ class SenderSocket
 public:
 	SenderSocket();
 	int open(const char *, int, int, LinkProperties *);
-	int OpenTrial(const char *, int, int, LinkProperties *);
+	int OpenTrial(char *, int, int, LinkProperties *);
 	~SenderSocket();
 };
 

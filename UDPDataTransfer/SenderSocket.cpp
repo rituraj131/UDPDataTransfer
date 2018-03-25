@@ -14,15 +14,15 @@ SenderSocket::SenderSocket()
 	}
 }
 
-int SenderSocket::OpenTrial(const char *host, int port_no, int senderWindow, LinkProperties *lp) {
+int SenderSocket::OpenTrial(char *host, int port_no, int senderWindow, LinkProperties *lp) {
 	printf("OpenTrial called, with host %s\n", host);
 
 	struct sockaddr_in local;
 	memset(&local, 0, sizeof(local));
+
 	local.sin_family = AF_INET;
 	local.sin_port = htons(0);
 	local.sin_addr.s_addr = htonl(INADDR_ANY);
-	//inet_pton(AF_INET, host, &local.sin_addr);
 
 	if (bind(sock, (struct sockaddr*)&local, sizeof(local)) == SOCKET_ERROR) {
 		cout << "Binder failed! " << WSAGetLastError() << endl;
@@ -33,9 +33,36 @@ int SenderSocket::OpenTrial(const char *host, int port_no, int senderWindow, Lin
 
 	struct sockaddr_in server;
 	memset(&server, 0, sizeof(server));
+
+	struct hostent *remote;
+	char *address;
+	in_addr addr;
+
+	DWORD IP = inet_addr(host);
+
+	if (IP == INADDR_NONE)
+	{
+		// if not a valid IP, then do a DNS lookup
+		if ((remote = gethostbyname(host)) == NULL)
+		{
+			cout << "failed with " << WSAGetLastError() << endl;
+			return -1;
+		}
+		else // take the first IP address and copy into sin_addr
+		{
+			memcpy((char *)&(server.sin_addr), remote->h_addr, remote->h_length);
+			addr.s_addr = *(u_long *)remote->h_addr;
+			address = inet_ntoa(addr);
+		}
+	}
+	else
+	{
+		// if a valid IP, directly drop its binary version into sin_addr
+		server.sin_addr.S_un.S_addr = IP;
+		address = host;
+	}
+
 	server.sin_family = AF_INET;
-	server.sin_addr.s_addr = inet_addr(host);
-	//inet_pton(AF_INET, host, &server.sin_addr);
 	server.sin_port = htons(port_no);
 
 	int attemptCount = 0;
