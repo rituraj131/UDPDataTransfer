@@ -11,13 +11,19 @@
 #define TIMEOUT 5 // timeout after all retx attempts are exhausted
 #define FAILED_RECV 6 // recvfrom() failed in kernel
 
+#define MAX_SYN_ATTEMPT_COUNT 3
+#define MAX_FIN_ATTEMPT_COUNT 5
+
 #include "common.h"
+#include "TransferProp.h"
 
 class SenderSocket
 {
 	SOCKET sock;
 public:
 	SenderSocket();
+	int open(const char *, int, int, LinkProperties *);
+	int OpenTrial(const char *, int, int, LinkProperties *);
 	~SenderSocket();
 };
 

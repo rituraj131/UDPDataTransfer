@@ -9,5 +9,6 @@
 #include <stdio.h>
 #include<iostream>
 #include <string>
+#include <ws2tcpip.h>
 
 using namespace std;

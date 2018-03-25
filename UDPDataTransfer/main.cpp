@@ -34,7 +34,19 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
+	LinkProperties lp;
+	lp.RTT = RTT;
+	lp.speed = 1e6 * atof(argv[7]); // convert to megabits
+	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
+	lp.pLoss[RETURN_PATH] = atof(argv[6]);
+	lp.bufferSize = senderWindow + 50;
 	SenderSocket ss;
+	int status;
+
+	if ((status = ss.OpenTrial(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
+		//print error and return
+	}
+
 	WSACleanup();
 	system("pause");
 	return 0;
