@@ -24,35 +24,31 @@ int SenderSocket::OpenTrial(const char *host, int port_no, int senderWindow, Lin
 	local.sin_addr.s_addr = htonl(INADDR_ANY);
 	//inet_pton(AF_INET, host, &local.sin_addr);
 
-	/*if (bind(sock, (struct sockaddr*)&local, sizeof(local)) == SOCKET_ERROR) {
+	if (bind(sock, (struct sockaddr*)&local, sizeof(local)) == SOCKET_ERROR) {
 		cout << "Binder failed! " << WSAGetLastError() << endl;
 		//TODO: do something here
 		return -1;
-	}*/
+	}
 	cout << "Bind success" << endl;
 
 	struct sockaddr_in server;
-	//memset(&server, 0, sizeof(server));
+	memset(&server, 0, sizeof(server));
 	server.sin_family = AF_INET;
-	//server.sin_addr.s_addr = inet_addr(host);
-	inet_pton(AF_INET, host, &server.sin_addr);
+	server.sin_addr.s_addr = inet_addr(host);
+	//inet_pton(AF_INET, host, &server.sin_addr);
 	server.sin_port = htons(port_no);
-
-	if (connect(sock, (struct sockaddr*) &server, sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
-		return -1;
-	}
 
 	int attemptCount = 0;
 
-	char *synBuf = new char[sizeof(SenderSynHeader)];
-	SenderSynHeader ssh, *sshp = (SenderSynHeader *)synBuf;
-	ssh.sdh.flags.SYN = 1;
-	ssh.sdh.seq = 0;
-	memcpy(&(ssh.lp), lp, sizeof(LinkProperties));
+	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
+	SenderSynHeader senderSyncHeader;
+	senderSyncHeader.sdh.flags.SYN = 1;
+	senderSyncHeader.sdh.seq = 0;
+	senderSyncHeader.lp = *lp;
 
-	memcpy(synBuf, &ssh, sizeof(SenderSynHeader));
+	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
 	
-	int send_res = sendto(sock, synBuf, sizeof(SenderSynHeader), NULL, (struct sockaddr *)&server, sizeof(struct sockaddr_in));
+	int send_res = sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server, sizeof(struct sockaddr_in));
 	
 	printf("sendto_res: %d\n", send_res);
 	if (send_res == SOCKET_ERROR) {
