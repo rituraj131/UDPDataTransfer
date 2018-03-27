@@ -202,8 +202,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
-			//RTO = timeGetTime() - time;
-			//TODO: update RTO
+			
 			printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);
 			return STATUS_OK;

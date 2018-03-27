@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 	int bottleNeckSpeed = atoi(argv[7]);
 
 	printf("Main:\tsender W= %d, RTT %0.3f sec, loss %g / %g, link %d Mbps\n", senderWindow, RTT, lossProbabForward, lossProbabReverse, bottleNeckSpeed);
-	printf("Main:\tinitializing DWORD array with 2^%d elements...", power);
+	printf("Main:\tinitializing DWORD array with 2^%d elements... ", power);
 
 	DWORD time = timeGetTime();
 	UINT64 dwordBufSize = (UINT64)1 << power;
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		cout << "WSAStartup failed with error : " << WSAGetLastError() << endl;
 		WSACleanup();
-		return 0;
+		return -1;
 	}
 
 	LinkProperties lp;
@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
 		WSACleanup();
-		system("pause");
-		return 0;
+		//system("pause");
+		return -1;
 	}
 
 	printf("Main:\tconnected to %s in %0.3f sec, pkt size %d bytes\n", targetHost, 
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 			printf("Main:\tsend failed with status %d\n", status);
 			WSACleanup();
 			system("pause");
-			return 0;
+			return -1;
 		}
 		off += bytes;
 	}
@@ -77,8 +77,8 @@ int main(int argc, char **argv) {
 	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
 		WSACleanup();
-		system("pause");
-		return 0;
+		//system("pause");
+		return -1;
 	}
 
 	printf("Main:\ttransfer finished in %0.3f sec\n", (float)(timeGetTime() - time) / 1000);
