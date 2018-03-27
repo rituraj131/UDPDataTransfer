@@ -30,7 +30,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	local.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	if (::bind(sock, (struct sockaddr*)&local, sizeof(local)) == SOCKET_ERROR) {
-		cout << "Binder failed! " << WSAGetLastError() << endl;
+		cout << "Binder failed with error: " << WSAGetLastError() << endl;
 		return -1;
 	}
 
@@ -100,8 +100,9 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			return FAILED_SEND;
 		}
 
-		//timeout.tv_sec = RTO;
-		timeout.tv_usec = RTO * 1000000;
+		int milliseconds = RTO * 1000;
+		timeout.tv_sec = milliseconds / 1000;
+		timeout.tv_usec = (milliseconds % 1000) * 1000;
 		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
 			int response_size = sizeof(server);
 
