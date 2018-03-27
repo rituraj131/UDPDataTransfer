@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 		if ((status = ss.Send(charBuf + off, bytes)) != STATUS_OK) {
 			printf("Main:\tsend failed with status %d\n", status);
 			WSACleanup();
-			system("pause");
+			//system("pause");
 			return -1;
 		}
 		off += bytes;
@@ -85,6 +85,6 @@ int main(int argc, char **argv) {
 
 
 	WSACleanup();
-	system("pause");
+	//system("pause");
 	return 0;
 }
