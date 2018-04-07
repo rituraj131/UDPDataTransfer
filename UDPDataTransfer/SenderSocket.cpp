@@ -119,8 +119,8 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 
 			RTO = 3.0f * (float)(timeGetTime() - sendToTime)/1000;
 
-			printf("[%0.3f] <-- SYN-ACK %d window %d; setting initial RTO to %0.3f\n", (float)(timeGetTime() - time) / 1000,
-				senderSyncHeader.sdh.seq, receiverHeader->recvWnd, RTO);
+			/*printf("[%0.3f] <-- SYN-ACK %d window %d; setting initial RTO to %0.3f\n", (float)(timeGetTime() - time) / 1000,
+				senderSyncHeader.sdh.seq, receiverHeader->recvWnd, RTO);*/
 			return STATUS_OK;
 		}
 	}
@@ -149,6 +149,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 	}
 
 	send_seqnum++;
+	//printf("send_seqnum: %d\n", send_seqnum);
 	return STATUS_OK;
 }
 

@@ -26,11 +26,12 @@
 class SenderSocket
 {
 	SOCKET sock;
+	struct sockaddr_in sock_server;
+public:
 	float RTO;
 	DWORD time;
 	int send_seqnum;
-	struct sockaddr_in sock_server;
-public:
+
 	SenderSocket();
 	int Open(char *, int, int, LinkProperties *);
 	int Close(int, LinkProperties *);
