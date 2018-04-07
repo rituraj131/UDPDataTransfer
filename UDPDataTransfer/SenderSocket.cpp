@@ -197,12 +197,6 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 
 	char *answBuf = new char[sizeof(ReceiverHeader)];
 
-	fd_set sockHolder;
-	FD_ZERO(&sockHolder);
-	FD_SET(sock, &sockHolder);
-
-	struct timeval timeout;
-
 	int attemptCount = 0;
 
 	while (attemptCount++ < MAX_FIN_ATTEMPT_COUNT) {
@@ -214,7 +208,12 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
+		
+		fd_set sockHolder;
+		FD_ZERO(&sockHolder);
+		FD_SET(sock, &sockHolder);
 
+		struct timeval timeout;
 		//timeout.tv_sec = RTO;
 		timeout.tv_usec = RTO * 1000000;
 		if (select(0, NULL, &sockHolder, NULL, &timeout) > 0) {
