@@ -1,6 +1,8 @@
 #include "common.h"
 #include "SenderSocket.h"
 
+bool isCloseCalled = false;
+
 int main(int argc, char **argv) {
 	if (argc != 8) {
 		cout << "Wrong Number of input parameters! Exiting..." << endl;
@@ -31,12 +33,13 @@ int main(int argc, char **argv) {
 	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		cout << "WSAStartup failed with error : " << WSAGetLastError() << endl;
 		WSACleanup();
+		system("pause");
 		return -1;
 	}
 
 	LinkProperties lp;
 	lp.RTT = RTT;
-	lp.speed = 1e6 * atof(argv[7]); // convert to megabits
+	lp.speed = 1000000 * atof(argv[7]); // convert to megabits
 	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
 	lp.pLoss[RETURN_PATH] = atof(argv[6]);
 	lp.bufferSize = senderWindow;
@@ -48,7 +51,7 @@ int main(int argc, char **argv) {
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
 		WSACleanup();
-		//system("pause");
+		system("pause");
 		return -1;
 	}
 
@@ -68,7 +71,7 @@ int main(int argc, char **argv) {
 		if ((status = ss.Send(charBuf + off, bytes)) != STATUS_OK) {
 			printf("Main:\tsend failed with status %d\n", status);
 			WSACleanup();
-			//system("pause");
+			system("pause");
 			return -1;
 		}
 		off += bytes;
@@ -77,7 +80,7 @@ int main(int argc, char **argv) {
 	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
 		WSACleanup();
-		//system("pause");
+		system("pause");
 		return -1;
 	}
 
@@ -85,6 +88,17 @@ int main(int argc, char **argv) {
 
 
 	WSACleanup();
-	//system("pause");
+	system("pause");
 	return 0;
+}
+
+void statsThread() {
+	DWORD time = timeGetTime();
+
+	while (true) {
+		Sleep(2000);
+
+		if (isCloseCalled)
+			break;
+	}
 }

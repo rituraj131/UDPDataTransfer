@@ -79,10 +79,6 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
 	
 	char *answBuf = new char[sizeof(ReceiverHeader)];
-	
-	fd_set sockHolder;
-	FD_ZERO(&sockHolder);
-	FD_SET(sock, &sockHolder);
 
 	struct timeval timeout;
 
@@ -91,8 +87,11 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
 		printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
 			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);
-
+		//Sleep(100);
 		DWORD sendToTime = timeGetTime();
+		fd_set sockHolder;
+		FD_ZERO(&sockHolder);
+		FD_SET(sock, &sockHolder);
 
 		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&server,
 			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
@@ -103,6 +102,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 		int milliseconds = RTO * 1000;
 		timeout.tv_sec = milliseconds / 1000;
 		timeout.tv_usec = (milliseconds % 1000) * 1000;
+		
 		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
 			int response_size = sizeof(server);
 
