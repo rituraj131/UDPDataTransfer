@@ -87,7 +87,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
 		printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
 			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);
-		//Sleep(100);
+		
 		DWORD sendToTime = timeGetTime();
 		fd_set sockHolder;
 		FD_ZERO(&sockHolder);

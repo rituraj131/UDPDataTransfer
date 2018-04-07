@@ -1,7 +1,5 @@
 #include "Checksum.h"
 
-
-
 Checksum::Checksum()
 {
 	// set up a lookup table for later use
