@@ -1,5 +1,6 @@
 #include "common.h"
 #include "SenderSocket.h"
+#include "Checksum.h"
 
 bool isCloseCalled = false;
 
@@ -74,6 +75,7 @@ int main(int argc, char **argv) {
 			system("pause");
 			return -1;
 		}
+
 		off += bytes;
 	}
 
@@ -84,7 +86,10 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	printf("Main:\ttransfer finished in %0.3f sec\n", (float)(timeGetTime() - time) / 1000);
+	Checksum cs;
+	uint32_t crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
+
+	printf("Main:\ttransfer finished in %0.3f sec, checksum %X\n", (float)(timeGetTime() - time) / 1000, crc32_recv);
 
 
 	WSACleanup();

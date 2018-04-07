@@ -85,8 +85,8 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	int attemptCount = 0;
 
 	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
-		printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
-			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);
+		/*printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
+			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);*/
 		
 		DWORD sendToTime = timeGetTime();
 		fd_set sockHolder;
@@ -152,7 +152,6 @@ int SenderSocket::Send(char *buf, int bytes) {
 	return STATUS_OK;
 }
 
-
 int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
 		return NOT_CONNECTED;
@@ -180,8 +179,8 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	int attemptCount = 0;
 
 	while (attemptCount++ < MAX_FIN_ATTEMPT_COUNT) {
-		printf("[%0.3f] --> FIN %d (attempt %d of %d, RTO %0.3f)\n", (float)(timeGetTime() - time) / 1000,
-			senderSyncHeader.sdh.seq, MAX_FIN_ATTEMPT_COUNT, attemptCount, RTO);
+		/*printf("[%0.3f] --> FIN %d (attempt %d of %d, RTO %0.3f)\n", (float)(timeGetTime() - time) / 1000,
+			senderSyncHeader.sdh.seq, MAX_FIN_ATTEMPT_COUNT, attemptCount, RTO);*/
 
 		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&sock_server,
 			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {

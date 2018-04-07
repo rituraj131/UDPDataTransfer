@@ -2,6 +2,7 @@
 
 Checksum::Checksum()
 {
+	crc_table = new uint32_t[256];
 	// set up a lookup table for later use
 	for (DWORD i = 0; i < 256; i++)
 	{
