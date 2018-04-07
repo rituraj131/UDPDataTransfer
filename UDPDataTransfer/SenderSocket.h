@@ -31,6 +31,7 @@ public:
 	float RTO;
 	DWORD time;
 	int send_seqnum;
+	UINT32 close_checksum;
 
 	SenderSocket();
 	int Open(char *, int, int, LinkProperties *);

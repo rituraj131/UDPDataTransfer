@@ -141,16 +141,43 @@ int SenderSocket::Send(char *buf, int bytes) {
 	memcpy(sendBuf, &senderDataHeader, sizeof(SenderDataHeader));
 
 	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
-
-	if (sendto(sock, (char *)sendBuf, sizeof(SenderSynHeader), 0, (struct sockaddr *)&sock_server,
+	
+	if (sendto(sock, (char *)sendBuf, MAX_PKT_SIZE, 0, (struct sockaddr *)&sock_server,
 		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());
 		return FAILED_SEND;
 	}
 
-	send_seqnum++;
-	//printf("send_seqnum: %d\n", send_seqnum);
-	return STATUS_OK;
+	fd_set sockHolder;
+	FD_ZERO(&sockHolder);
+	FD_SET(sock, &sockHolder);
+
+	struct timeval timeout;
+	timeout.tv_usec = RTO * 1000000;
+
+	int s_res = select(0, NULL, &sockHolder, NULL, &timeout);
+	//printf("s_res: %d\n", s_res);
+	if (s_res > 0) {
+		int recv_res;
+		int response_size = sizeof(sock_server);
+		char *answBuf = new char[sizeof(ReceiverHeader)];
+
+		if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+			(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
+			printf("failed recvfrom with %d\n", WSAGetLastError());
+			return FAILED_RECV;
+		}
+
+		ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+		//printf("curr seq: %d, receiver achseq: %d\n", send_seqnum, receiverHeader->ackSeq);
+		if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
+
+		send_seqnum++;
+		return STATUS_OK;
+	}
+	
+
+	return FAILED_SEND;
 }
 
 int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
@@ -191,7 +218,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 
 		//timeout.tv_sec = RTO;
 		timeout.tv_usec = RTO * 1000000;
-		if (select(0, &sockHolder, NULL, NULL, &timeout) > 0) {
+		if (select(0, NULL, &sockHolder, NULL, &timeout) > 0) {
 			int response_size = sizeof(sock_server);
 
 			int recv_res;
@@ -204,7 +231,8 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
 			
-			printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
+			printf("recvWnd %u\n",receiverHeader->recvWnd);
+			printf("[%0.2f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);
 			return STATUS_OK;
 		}
