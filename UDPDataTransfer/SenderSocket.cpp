@@ -133,16 +133,15 @@ int SenderSocket::Send(char *buf, int bytes) {
 		return NOT_CONNECTED;
 	}
 
-	char *sendBuf = new char[MAX_PKT_SIZE];
+	char *sendBuf = new char[bytes + sizeof(SenderDataHeader)];
 
 	SenderDataHeader senderDataHeader;
 	senderDataHeader.seq = send_seqnum;
 
 	memcpy(sendBuf, &senderDataHeader, sizeof(SenderDataHeader));
-
 	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
 	
-	if (sendto(sock, (char *)sendBuf, MAX_PKT_SIZE, 0, (struct sockaddr *)&sock_server,
+	if (sendto(sock, (char *)sendBuf, bytes + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
 		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());
 		return FAILED_SEND;

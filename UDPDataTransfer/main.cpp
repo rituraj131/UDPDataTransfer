@@ -97,8 +97,8 @@ int main(int argc, char **argv) {
 	}
 
 	Checksum cs;
-	uint32_t crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
-
+	UINT32 crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
+	UINT32 crc32_send_buf = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
 	printf("Main:\ttransfer finished in %0.3f sec, checksum %X, received checksum %X\n", (float)(timeGetTime() - time) / 1000, crc32_recv, ss.close_checksum);
 
 	if (statsThread.joinable())
