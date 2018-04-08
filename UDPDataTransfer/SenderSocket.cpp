@@ -147,44 +147,50 @@ int SenderSocket::Send(char *buf, int bytes) {
 		return FAILED_SEND;
 	}
 
-	fd_set sockHolder;
-	FD_ZERO(&sockHolder);
-	FD_SET(sock, &sockHolder);
+	int attempt_count = 0;
 
-	struct timeval timeout;
-	timeout.tv_usec = RTO * 1000000;
+	while (attempt_count++ < MAX_NONSYN_ATTEMPT_COUNT) {
+		if (attempt_count > 1)
+			timeout_packet_count++;
 
-	int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
-	//printf("s_res: %d\n", s_res);
-	if (s_res > 0) {
-		int recv_res;
-		int response_size = sizeof(sock_server);
-		char *answBuf = new char[sizeof(ReceiverHeader)];
+		fd_set sockHolder;
+		FD_ZERO(&sockHolder);
+		FD_SET(sock, &sockHolder);
 
-		if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
-			(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
-			printf("failed recvfrom with %d\n", WSAGetLastError());
-			return FAILED_RECV;
+		struct timeval timeout;
+		timeout.tv_usec = RTO * 1000000;
+
+		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
+		if (s_res > 0) {
+			int recv_res;
+			int response_size = sizeof(sock_server);
+			char *answBuf = new char[sizeof(ReceiverHeader)];
+
+			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
+				printf("failed recvfrom with %d\n", WSAGetLastError());
+				return FAILED_RECV;
+			}
+
+			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+			//printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
+			if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
+
+			send_seqnum++;
+			return STATUS_OK;
 		}
-
-		ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-		//printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
-		if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
-
-		send_seqnum++;
-		return STATUS_OK;
 	}
 	
 
 	return TIMEOUT;
 }
 
-int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
+int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, UINT32 *crc32_Close) {
 	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
 		return NOT_CONNECTED;
 	}
 
-	lp->bufferSize += MAX_FIN_ATTEMPT_COUNT;
+	lp->bufferSize += MAX_NONSYN_ATTEMPT_COUNT;
 
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
 	SenderSynHeader senderSyncHeader;
@@ -201,7 +207,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 
 	int attemptCount = 0;
 	
-	while (attemptCount++ < MAX_FIN_ATTEMPT_COUNT) {
+	while (attemptCount++ < MAX_NONSYN_ATTEMPT_COUNT) {
 		/*printf("[%0.3f] --> FIN %d (attempt %d of %d, RTO %0.3f)\n", (float)(timeGetTime() - time) / 1000,
 		senderSyncHeader.sdh.seq, MAX_FIN_ATTEMPT_COUNT, attemptCount, RTO);*/
 
@@ -234,8 +240,11 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
 
+			printf("[%2.2f] <-- FIN-ACK %d window %X\n", (float)(timeGetTime() - startTime) / 1000, receiverHeader->ackSeq, receiverHeader->recvWnd);
 			/*printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);*/
+
+			*crc32_Close = receiverHeader->recvWnd;
 			return STATUS_OK;
 		}
 	}

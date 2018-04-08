@@ -12,10 +12,11 @@
 #define FAILED_RECV 6 // recvfrom() failed in kernel
 
 #define MAX_SYN_ATTEMPT_COUNT 3
-#define MAX_FIN_ATTEMPT_COUNT 5
+#define MAX_NONSYN_ATTEMPT_COUNT 5
 
 #include "common.h"
 #include "TransferProp.h"
+#include "Checksum.h"
 
 //status of SYN
 #define SYN_STATUS_NONE 0
@@ -35,7 +36,7 @@ public:
 
 	SenderSocket();
 	int Open(char *, int, int, LinkProperties *);
-	int Close(int, LinkProperties *);
+	int Close(int, LinkProperties *, DWORD, UINT32 *);
 	int Send(char *, int);
 	~SenderSocket();
 };

@@ -83,6 +83,8 @@ int main(int argc, char **argv) {
 		if (status != STATUS_OK) {
 			printf("Main:\tsend failed with status %d\n", status);
 			isCloseCalled = true;
+			if (statsThread.joinable())
+				statsThread.join();
 			WSACleanup();
 			system("pause");
 			return -1;
@@ -94,26 +96,33 @@ int main(int argc, char **argv) {
 	isCloseCalled = true;
 	
 	//printStatsOneLastTime(&ss, &off, time, statStartTime);
-	
-	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
+	Checksum cs;
+	UINT32 crc32_Close = 1;
+	if ((status = ss.Close(senderWindow, &lp, statStartTime, &crc32_Close)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
+		if (statsThread.joinable())
+			statsThread.join();
 		WSACleanup();
 		system("pause");
 		return -1;
 	}
 
-	Checksum cs;
 	UINT32 crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
-	//UINT32 crc32_send_buf = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
-
-	printf("[%2.2f] <-- FIN-ACK %d window %X\n", (timeGetTime() - statStartTime)/1000, ss.send_seqnum, crc32_recv);
+	
+	if (crc32_Close != crc32_recv) {
+		printf("Checums provided by reciver %X does not match to the checksum %X acroos the sent buffer\nExiting!!\n", crc32_Close, crc32_recv);
+		if (statsThread.joinable())
+			statsThread.join();
+		WSACleanup();
+		system("pause");
+		return -1;
+	}
 
 	float final_speed = (ss.send_seqnum * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / totalSendTime;
 	printf("Main:\ttransfer finished in %0.3f sec, %0.3f Kbps checksum %X, received checksum %X\n", (float)totalSendTime / 1000, final_speed, 
 		crc32_recv, ss.close_checksum);
 
-	if (statsThread.joinable())
-		statsThread.join();
+	
 
 	WSACleanup();
 	system("pause");
@@ -129,7 +138,7 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 			break;
 
 		float time_elapsed = (float)(timeGetTime() - time) / 1000;
-		int data_send = *off/ 1000000; //MB
+		float data_send = (float)*off/ 1000000; //MB
 		
 		float RTT = 0.000f;
 		
