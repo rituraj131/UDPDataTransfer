@@ -154,7 +154,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 	struct timeval timeout;
 	timeout.tv_usec = RTO * 1000000;
 
-	int s_res = select(0, NULL, &sockHolder, NULL, &timeout);
+	int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
 	//printf("s_res: %d\n", s_res);
 	if (s_res > 0) {
 		int recv_res;
@@ -168,7 +168,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 		}
 
 		ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-		//printf("curr seq: %d, receiver achseq: %d\n", send_seqnum, receiverHeader->ackSeq);
+		printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
 		if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
 
 		send_seqnum++;
@@ -190,35 +190,41 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	SenderSynHeader senderSyncHeader;
 	senderSyncHeader.sdh.flags.FIN = 1;
 	senderSyncHeader.sdh.flags.reserved = 0;
-	senderSyncHeader.sdh.seq = 0;
+	senderSyncHeader.sdh.seq = send_seqnum -1;
 	senderSyncHeader.lp = *lp;
 
 	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
 
 	char *answBuf = new char[sizeof(ReceiverHeader)];
 
-	int attemptCount = 0;
+	struct timeval timeout;
 
+	int attemptCount = 0;
+	cout << "port: " << sock_server.sin_port << endl;
 	while (attemptCount++ < MAX_FIN_ATTEMPT_COUNT) {
 		/*printf("[%0.3f] --> FIN %d (attempt %d of %d, RTO %0.3f)\n", (float)(timeGetTime() - time) / 1000,
-			senderSyncHeader.sdh.seq, MAX_FIN_ATTEMPT_COUNT, attemptCount, RTO);*/
+		senderSyncHeader.sdh.seq, MAX_FIN_ATTEMPT_COUNT, attemptCount, RTO);*/
 
 		if (sendto(sock, (char *)buf_SendTo, sizeof(SenderSynHeader), 0, (struct sockaddr *)&sock_server,
 			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
+		printf("select calling RTO %f\n", RTO);
 		
 		fd_set sockHolder;
 		FD_ZERO(&sockHolder);
 		FD_SET(sock, &sockHolder);
+		
+		int milliseconds = RTO * 1000;
+		timeout.tv_sec = milliseconds / 1000;
+		timeout.tv_usec = (milliseconds % 1000) * 1000;
 
-		struct timeval timeout;
-		//timeout.tv_sec = RTO;
-		timeout.tv_usec = RTO * 1000000;
-		if (select(0, NULL, &sockHolder, NULL, &timeout) > 0) {
+		int select_res = select(0, &sockHolder, NULL, NULL, &timeout);
+		printf("select_res: %d\n", select_res);
+		if (select_res > 0) {
 			int response_size = sizeof(sock_server);
-
+			printf("select done\n");
 			int recv_res;
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
 				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
@@ -228,9 +234,8 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
-			
-			printf("recvWnd %u\n",receiverHeader->recvWnd);
-			printf("[%0.2f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
+
+			printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);
 			return STATUS_OK;
 		}

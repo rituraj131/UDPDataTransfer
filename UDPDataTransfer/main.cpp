@@ -69,11 +69,13 @@ int main(int argc, char **argv) {
 	UINT64 off = 0; // current position in buffer
 	DWORD statStartTime = timeGetTime();
 
-	thread statsThread(statsThread, &ss, &off, time, statStartTime);
-	while (off < byteBufferSize)
+	//thread statsThread(statsThread, &ss, &off, time, statStartTime);
+
+	while (off < 0)
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
+		if (bytes <= 0) break;
 		// send chunk into socket 
 		if ((status = ss.Send(charBuf + off, bytes)) != STATUS_OK) {
 			printf("Main:\tsend failed with status %d\n", status);
@@ -87,8 +89,9 @@ int main(int argc, char **argv) {
 	}
 
 	isCloseCalled = true;
+	
 	printStatsOneLastTime(&ss, &off, time, statStartTime);
-
+	
 	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
 		WSACleanup();
@@ -98,11 +101,11 @@ int main(int argc, char **argv) {
 
 	Checksum cs;
 	UINT32 crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
-	UINT32 crc32_send_buf = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
+	//UINT32 crc32_send_buf = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
 	printf("Main:\ttransfer finished in %0.3f sec, checksum %X, received checksum %X\n", (float)(timeGetTime() - time) / 1000, crc32_recv, ss.close_checksum);
 
-	if (statsThread.joinable())
-		statsThread.join();
+	/*if (statsThread.joinable())
+		statsThread.join();*/
 
 	WSACleanup();
 	system("pause");
