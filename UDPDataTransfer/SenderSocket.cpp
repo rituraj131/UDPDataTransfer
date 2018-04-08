@@ -184,12 +184,12 @@ int SenderSocket::Send(char *buf, int bytes) {
 			if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
 
 			send_seqnum++;
-
+			
 			if (attempt_count == 1) {
 				float sample_time = (timeGetTime() - time_before_recv) / 1000; //curr sample time in sec
-				float estimated_RTT = (1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
-				float dev_RTT = (1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
-				RTO = estimated_RTT + 4 * max(dev_RTT, 0.010f);
+				float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
+				float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
+				RTO = estimated_RTT + (float) 4 * max(dev_RTT, 0.010f);
 				prev_dev_RTT = dev_RTT;
 				prev_est_RTT = estimated_RTT;
 			}
