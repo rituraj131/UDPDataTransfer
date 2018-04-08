@@ -13,7 +13,7 @@ SenderSocket::SenderSocket()
 
 	RTO = 1.0f;
 	time = timeGetTime();
-	send_seqnum = timeout_packet_count = 0;
+	send_seqnum = timeout_packet_count = goodput = 0;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
 }
 

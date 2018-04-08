@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
 
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
 	
+	DWORD sendStartTime = timeGetTime();
 	while (off < byteBufferSize)
 	{
 		// decide the size of next chunk
@@ -89,10 +90,10 @@ int main(int argc, char **argv) {
 
 		off += bytes;
 	}
-
+	float totalSendTime = timeGetTime() - sendStartTime; //in ms
 	isCloseCalled = true;
 	
-	printStatsOneLastTime(&ss, &off, time, statStartTime);
+	//printStatsOneLastTime(&ss, &off, time, statStartTime);
 	
 	if ((status = ss.Close(senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
@@ -104,7 +105,12 @@ int main(int argc, char **argv) {
 	Checksum cs;
 	UINT32 crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
 	//UINT32 crc32_send_buf = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
-	printf("Main:\ttransfer finished in %0.3f sec, checksum %X, received checksum %X\n", (float)(timeGetTime() - time) / 1000, crc32_recv, ss.close_checksum);
+
+	printf("[%2.2f] <-- FIN-ACK %d window %X\n", (timeGetTime() - statStartTime)/1000, ss.send_seqnum, crc32_recv);
+
+	float final_speed = (ss.send_seqnum * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / totalSendTime;
+	printf("Main:\ttransfer finished in %0.3f sec, %0.3f Kbps checksum %X, received checksum %X\n", (float)totalSendTime / 1000, final_speed, 
+		crc32_recv, ss.close_checksum);
 
 	if (statsThread.joinable())
 		statsThread.join();
@@ -115,20 +121,24 @@ int main(int argc, char **argv) {
 }
 
 void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {
-	int base = 0;
+	int lastBase = 0;
 	while (true) {
 		Sleep(2000);
+
 		if (isCloseCalled)
 			break;
 
 		float time_elapsed = (float)(timeGetTime() - time) / 1000;
 		int data_send = *off/ 1000000; //MB
-		base = *off;
-		float speed = ((*off - base) * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) /(((float)timeGetTime() - startThreadTime)/1000);
+		
 		float RTT = 0.000f;
 		
-		printf("[%0.2f] B\t%6u (%0.1f MB) N\t%6u T 0 F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->send_seqnum,
-			data_send, ss->send_seqnum+1, speed, RTT);
+		int packets_sent = ss->send_seqnum - lastBase;
+		lastBase = ss->send_seqnum;
+		float speed = (float)(packets_sent * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / (2* 1000000);
+		
+		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->send_seqnum,
+			data_send, ss->send_seqnum+1, ss->timeout_packet_count, speed, RTT);
 	}
 }
 
