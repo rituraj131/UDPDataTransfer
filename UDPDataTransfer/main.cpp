@@ -123,6 +123,9 @@ int main(int argc, char **argv) {
 		crc32_recv);
 	printf("Main:\testRTT %0.3f, ideal rate %0.3f kbps\n", ss.prev_est_RTT, (float)ss.send_seqnum*MAX_PKT_SIZE/(ss.prev_est_RTT*1000));
 	
+	if (statsThread.joinable())
+		statsThread.join();
+
 	WSACleanup();
 	system("pause");
 	return 0;
