@@ -10,5 +10,6 @@
 #include<iostream>
 #include <string>
 #include <ws2tcpip.h>
+#include <algorithm>
 
 using namespace std;

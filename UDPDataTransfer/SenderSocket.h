@@ -24,6 +24,9 @@
 #define SYN_STATUS_COMPLETED_SUCCESSFULLY 2
 #define SYN_STATUS_FAILED 3
 
+#define ALPHA 0.125
+#define BETA 0.25
+
 class SenderSocket
 {
 	SOCKET sock;
@@ -31,8 +34,8 @@ class SenderSocket
 public:
 	float RTO;
 	DWORD time;
+	float prev_dev_RTT, prev_est_RTT;
 	int send_seqnum, timeout_packet_count, goodput;
-	UINT32 close_checksum;
 
 	SenderSocket();
 	int Open(char *, int, int, LinkProperties *);

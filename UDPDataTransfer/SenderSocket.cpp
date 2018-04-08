@@ -14,6 +14,8 @@ SenderSocket::SenderSocket()
 	RTO = 1.0f;
 	time = timeGetTime();
 	send_seqnum = timeout_packet_count = goodput = 0;
+	prev_dev_RTT = 0.0f;
+	prev_est_RTT = 1.0f;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
 }
 
@@ -68,6 +70,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	server.sin_port = htons(port_no);
 
 	lp->bufferSize += MAX_SYN_ATTEMPT_COUNT;
+	RTO = max(1.0f, 2*lp->RTT);
 
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
 	SenderSynHeader senderSyncHeader;
@@ -98,7 +101,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
-
+		
 		int milliseconds = RTO * 1000;
 		timeout.tv_sec = milliseconds / 1000;
 		timeout.tv_usec = (milliseconds % 1000) * 1000;
@@ -117,7 +120,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			if (receiverHeader->flags.ACK != 1) continue;
 			memcpy(&sock_server, &server, sizeof(struct sockaddr_in));
 
-			RTO = 3.0f * (float)(timeGetTime() - sendToTime)/1000;
+			//RTO = 3.0f * (float)(timeGetTime() - sendToTime)/1000; not needed anymore!
 
 			/*printf("[%0.3f] <-- SYN-ACK %d window %d; setting initial RTO to %0.3f\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd, RTO);*/
@@ -158,13 +161,17 @@ int SenderSocket::Send(char *buf, int bytes) {
 		FD_SET(sock, &sockHolder);
 
 		struct timeval timeout;
-		timeout.tv_usec = RTO * 1000000;
+		int milliseconds = RTO * 1000;
+		timeout.tv_sec = milliseconds / 1000;
+		timeout.tv_usec = (milliseconds % 1000) * 1000;
 
 		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
+
 		if (s_res > 0) {
 			int recv_res;
 			int response_size = sizeof(sock_server);
 			char *answBuf = new char[sizeof(ReceiverHeader)];
+			DWORD time_before_recv = timeGetTime();
 
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
 				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
@@ -177,6 +184,16 @@ int SenderSocket::Send(char *buf, int bytes) {
 			if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
 
 			send_seqnum++;
+
+			if (attempt_count == 1) {
+				float sample_time = (timeGetTime() - time_before_recv) / 1000; //curr sample time in sec
+				float estimated_RTT = (1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
+				float dev_RTT = (1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
+				RTO = estimated_RTT + 4 * max(dev_RTT, 0.010f);
+				prev_dev_RTT = dev_RTT;
+				prev_est_RTT = estimated_RTT;
+			}
+
 			return STATUS_OK;
 		}
 	}
@@ -229,7 +246,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, U
 		
 		if (select_res > 0) {
 			int response_size = sizeof(sock_server);
-			
+
 			int recv_res;
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
 				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
@@ -245,6 +262,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, U
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);*/
 
 			*crc32_Close = receiverHeader->recvWnd;
+
 			return STATUS_OK;
 		}
 	}
