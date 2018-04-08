@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 
 	//thread statsThread(statsThread, &ss, &off, time, statStartTime);
 
-	while (off < 0)
+	while (off < byteBufferSize)
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));

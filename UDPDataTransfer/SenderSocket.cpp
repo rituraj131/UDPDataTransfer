@@ -168,7 +168,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 		}
 
 		ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-		printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
+		//printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
 		if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
 
 		send_seqnum++;
@@ -190,7 +190,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	SenderSynHeader senderSyncHeader;
 	senderSyncHeader.sdh.flags.FIN = 1;
 	senderSyncHeader.sdh.flags.reserved = 0;
-	senderSyncHeader.sdh.seq = send_seqnum -1;
+	senderSyncHeader.sdh.seq = send_seqnum;
 	senderSyncHeader.lp = *lp;
 
 	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
@@ -200,7 +200,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 	struct timeval timeout;
 
 	int attemptCount = 0;
-	cout << "port: " << sock_server.sin_port << endl;
+	
 	while (attemptCount++ < MAX_FIN_ATTEMPT_COUNT) {
 		/*printf("[%0.3f] --> FIN %d (attempt %d of %d, RTO %0.3f)\n", (float)(timeGetTime() - time) / 1000,
 		senderSyncHeader.sdh.seq, MAX_FIN_ATTEMPT_COUNT, attemptCount, RTO);*/
@@ -210,7 +210,6 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 			printf("failed sendto with %d\n", WSAGetLastError());
 			return FAILED_SEND;
 		}
-		printf("select calling RTO %f\n", RTO);
 		
 		fd_set sockHolder;
 		FD_ZERO(&sockHolder);
@@ -221,10 +220,10 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 		timeout.tv_usec = (milliseconds % 1000) * 1000;
 
 		int select_res = select(0, &sockHolder, NULL, NULL, &timeout);
-		printf("select_res: %d\n", select_res);
+		
 		if (select_res > 0) {
 			int response_size = sizeof(sock_server);
-			printf("select done\n");
+			
 			int recv_res;
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
 				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
@@ -235,8 +234,8 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
 
-			printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
-				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);
+			/*printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
+				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);*/
 			return STATUS_OK;
 		}
 	}
