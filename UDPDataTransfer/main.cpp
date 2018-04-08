@@ -69,15 +69,17 @@ int main(int argc, char **argv) {
 	UINT64 off = 0; // current position in buffer
 	DWORD statStartTime = timeGetTime();
 
-	//thread statsThread(statsThread, &ss, &off, time, statStartTime);
-
+	thread statsThread(statsThread, &ss, &off, time, statStartTime);
+	
 	while (off < byteBufferSize)
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
 		if (bytes <= 0) break;
 		// send chunk into socket 
-		if ((status = ss.Send(charBuf + off, bytes)) != STATUS_OK) {
+		status = ss.Send(charBuf + off, bytes);
+
+		if (status != STATUS_OK) {
 			printf("Main:\tsend failed with status %d\n", status);
 			isCloseCalled = true;
 			WSACleanup();
@@ -104,8 +106,8 @@ int main(int argc, char **argv) {
 	//UINT32 crc32_send_buf = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
 	printf("Main:\ttransfer finished in %0.3f sec, checksum %X, received checksum %X\n", (float)(timeGetTime() - time) / 1000, crc32_recv, ss.close_checksum);
 
-	/*if (statsThread.joinable())
-		statsThread.join();*/
+	if (statsThread.joinable())
+		statsThread.join();
 
 	WSACleanup();
 	system("pause");
@@ -115,6 +117,7 @@ int main(int argc, char **argv) {
 void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {
 	int base = 0;
 	while (true) {
+		Sleep(2000);
 		if (isCloseCalled)
 			break;
 
@@ -126,8 +129,6 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 		
 		printf("[%0.2f] B\t%6u (%0.1f MB) N\t%6u T 0 F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->send_seqnum,
 			data_send, ss->send_seqnum+1, speed, RTT);
-
-		Sleep(2000);
 	}
 }
 
@@ -135,6 +136,6 @@ void printStatsOneLastTime(SenderSocket *ss, UINT64 *off, DWORD time, DWORD star
 	int data_send = *off / 1000000;
 	float speed = (data_send * 8) / (((float)timeGetTime() - startThreadTime) / 1000);
 	float RTT = 0.000f;
-	printf("[%0.2f] B\t%6u (%0.1f MB) N\t%6u T 0 F 0 W 1 S %0.3f Mbps RTT %0.3f\n", (float)(timeGetTime() - time)/1000, ss->send_seqnum,
-		*off / 1000000, ss->send_seqnum + 1, speed, RTT);
+	printf("[%d] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", (timeGetTime() - time)/1000, ss->send_seqnum,
+		(float)*off / 1000000, ss->send_seqnum + 1, ss->timeout_packet_count, speed, RTT);
 }

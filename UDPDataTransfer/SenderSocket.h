@@ -30,7 +30,7 @@ class SenderSocket
 public:
 	float RTO;
 	DWORD time;
-	int send_seqnum;
+	int send_seqnum, timeout_packet_count;
 	UINT32 close_checksum;
 
 	SenderSocket();

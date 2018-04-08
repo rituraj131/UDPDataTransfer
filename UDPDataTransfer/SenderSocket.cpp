@@ -13,7 +13,7 @@ SenderSocket::SenderSocket()
 
 	RTO = 1.0f;
 	time = timeGetTime();
-	send_seqnum = 0;
+	send_seqnum = timeout_packet_count = 0;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
 }
 
@@ -124,7 +124,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			return STATUS_OK;
 		}
 	}
-	
+	timeout_packet_count++;
 	return TIMEOUT;
 }
 
@@ -176,7 +176,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 	}
 	
 
-	return FAILED_SEND;
+	return TIMEOUT;
 }
 
 int SenderSocket::Close(int senderWindow, LinkProperties *lp) {
