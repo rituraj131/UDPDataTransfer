@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		cout << "WSAStartup failed with error : " << WSAGetLastError() << endl;
 		WSACleanup();
-		system("pause");
+		//system("pause");
 		return -1;
 	}
 
@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
 		WSACleanup();
-		system("pause");
+		//system("pause");
 		return -1;
 	}
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 			if (statsThread.joinable())
 				statsThread.join();
 			WSACleanup();
-			system("pause");
+			//system("pause");
 			return -1;
 		}
 
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 		if (statsThread.joinable())
 			statsThread.join();
 		WSACleanup();
-		system("pause");
+		//system("pause");
 		return -1;
 	}
 
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
 		statsThread.join();
 
 	WSACleanup();
-	system("pause");
+	//system("pause");
 	return 0;
 }
 
