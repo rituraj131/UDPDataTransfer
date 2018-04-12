@@ -145,15 +145,17 @@ int SenderSocket::Send(char *buf, int bytes) {
 	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
 	
 	DWORD time_before_recv = timeGetTime();
-	if (sendto(sock, (char *)sendBuf, bytes + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
-		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
-		printf("failed Send sendto with %d\n", WSAGetLastError());
-		return FAILED_SEND;
-	}
 
 	int attempt_count = 0;
 
 	while (attempt_count++ < MAX_NONSYN_ATTEMPT_COUNT) {
+		if (sendto(sock, (char *)sendBuf, bytes + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
+			sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
+			printf("failed Send sendto with %d\n", WSAGetLastError());
+			return FAILED_SEND;
+		}
+
+
 		if (attempt_count > 1)
 			timeout_packet_count++;
 
@@ -167,7 +169,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 		timeout.tv_usec = (milliseconds % 1000) * 1000;
 
 		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
-
+		
 		if (s_res > 0) {
 			int recv_res;
 			int response_size = sizeof(sock_server);
@@ -181,7 +183,10 @@ int SenderSocket::Send(char *buf, int bytes) {
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			//printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
-			if (receiverHeader->ackSeq != send_seqnum + 1) continue;
+			if (receiverHeader->ackSeq != send_seqnum + 1) {
+				attempt_count--;
+				continue;
+			}
 
 			send_seqnum++;
 			
