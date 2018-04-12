@@ -144,6 +144,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 	memcpy(sendBuf, &senderDataHeader, sizeof(SenderDataHeader));
 	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
 	
+	DWORD time_before_recv = timeGetTime();
 	if (sendto(sock, (char *)sendBuf, bytes + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
 		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());
@@ -171,7 +172,6 @@ int SenderSocket::Send(char *buf, int bytes) {
 			int recv_res;
 			int response_size = sizeof(sock_server);
 			char *answBuf = new char[sizeof(ReceiverHeader)];
-			DWORD time_before_recv = timeGetTime();
 
 			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
 				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
@@ -186,7 +186,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 			send_seqnum++;
 			
 			if (attempt_count == 1) {
-				float sample_time = (timeGetTime() - time_before_recv) / 1000; //curr sample time in sec
+				float sample_time = (float)(timeGetTime() - time_before_recv) / 1000; //curr sample time in sec
 				float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
 				float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
 				RTO = estimated_RTT + (float) 4 * max(dev_RTT, 0.010f);

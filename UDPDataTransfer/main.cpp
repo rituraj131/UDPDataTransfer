@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 		status = ss.Send(charBuf + off, bytes);
 
 		if (status != STATUS_OK) {
-			printf("Main:\tOpen send failed with status %d\n", status);
+			printf("Main:\send failed with status %d\n", status);
 			isCloseCalled = true;
 			if (statsThread.joinable())
 				statsThread.join();
@@ -121,7 +121,8 @@ int main(int argc, char **argv) {
 	float final_speed = (ss.send_seqnum * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / totalSendTime;
 	printf("Main:\ttransfer finished in %0.3f sec, %0.3f Kbps checksum %X\n", (float)totalSendTime / 1000, final_speed, 
 		crc32_recv);
-	printf("Main:\testRTT %0.3f, ideal rate %0.3f Kbps\n", ss.prev_est_RTT, MAX_PKT_SIZE * 8/(ss.prev_est_RTT * 1000));
+	printf("Main:\testRTT %0.3f, ideal rate %0.3f Kbps\n", ss.prev_est_RTT,
+		(MAX_PKT_SIZE + sizeof(SenderDataHeader))* 8/(ss.prev_est_RTT * 1000));
 	
 	if (statsThread.joinable())
 		statsThread.join();
@@ -147,7 +148,7 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 		float speed = (float)(packets_sent * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / (2* 1000000);
 		
 		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->send_seqnum,
-			data_send, ss->send_seqnum+1, ss->timeout_packet_count, speed, ss->RTO);
+			data_send, ss->send_seqnum+1, ss->timeout_packet_count, speed, ss->prev_est_RTT);
 	}
 }
 
