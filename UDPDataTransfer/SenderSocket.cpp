@@ -181,7 +181,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			//printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
-			if (receiverHeader->flags.ACK != 1) return FAILED_SEND;
+			if (receiverHeader->ackSeq != send_seqnum + 1) continue;
 
 			send_seqnum++;
 			

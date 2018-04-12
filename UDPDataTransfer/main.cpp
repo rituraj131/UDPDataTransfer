@@ -110,12 +110,7 @@ int main(int argc, char **argv) {
 	UINT32 crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
 	
 	if (crc32_Close != crc32_recv) {
-		printf("Checums provided by reciver %X does not match to the checksum %X acroos the sent buffer\nExiting!!\n", crc32_Close, crc32_recv);
-		if (statsThread.joinable())
-			statsThread.join();
-		WSACleanup();
-		system("pause");
-		return -1;
+		printf("Checums provided by reciver %X does not match to the checksum %X acroos the sent buffer\n", crc32_Close, crc32_recv);
 	}
 
 	float final_speed = (ss.send_seqnum * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / totalSendTime;
