@@ -49,5 +49,12 @@ public:
 	DWORD ackSeq; // ack value = next expected sequence
 };
 
+class Packet {
+public:
+	int size;
+	SenderDataHeader sdh;
+	char data[MAX_PKT_SIZE];
+};
+
 #pragma pack(pop)
 

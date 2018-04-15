@@ -31,16 +31,23 @@ class SenderSocket
 {
 	SOCKET sock;
 	struct sockaddr_in sock_server;
+	int lastAckSeq;
+	Packet *buffer;
 public:
+	bool allPacketsSent;
 	float RTO;
 	DWORD time;
 	float prev_dev_RTT, prev_est_RTT;
-	int send_seqnum, timeout_packet_count, goodput;
-
-	SenderSocket();
+	int nextSeq, timeout_packet_count, goodput, slot, W, sendBase;
+	HANDLE empty, eventQuit, full, socketReceiveReady, allAcked;
+	SenderSocket(int);
 	int Open(char *, int, int, LinkProperties *);
 	int Close(int, LinkProperties *, DWORD, UINT32 *);
-	int Send(char *, int);
+	int Send_old(char *, int);
+	void Send(char *, int);
+	void WorkerRun();
+	int ACKThread();
+	int sendPacket(Packet);
 	~SenderSocket();
 };
 

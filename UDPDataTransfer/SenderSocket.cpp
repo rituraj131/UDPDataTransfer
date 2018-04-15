@@ -1,6 +1,6 @@
 #include "SenderSocket.h"
 
-SenderSocket::SenderSocket()
+SenderSocket::SenderSocket(int senderWindow)
 {
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -13,10 +13,18 @@ SenderSocket::SenderSocket()
 
 	RTO = 1.0f;
 	time = timeGetTime();
-	send_seqnum = timeout_packet_count = goodput = 0;
+	nextSeq = timeout_packet_count = goodput = lastAckSeq = sendBase = 0;
 	prev_dev_RTT = 0.0f;
 	prev_est_RTT = 1.0f;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
+	W = senderWindow;
+
+	empty = CreateSemaphore(NULL, senderWindow, senderWindow, NULL);
+	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
+	full = CreateEvent(NULL, TRUE, FALSE, "full");
+	socketReceiveReady = CreateEvent(NULL, TRUE, FALSE, "socketReceiveReady");
+	allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
+	buffer = new Packet[W];
 }
 
 int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties *lp) {
@@ -87,6 +95,19 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 
 	int attemptCount = 0;
 
+	int kernelBuffer = 20e6;
+	if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&kernelBuffer, sizeof(int)) == SOCKET_ERROR)
+	{
+		printf("setsockopt failed SO_RCVBUF (open) with error %d\n", WSAGetLastError());
+		return -1;
+	}
+	kernelBuffer = 20e6;
+	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&kernelBuffer, sizeof(int)) == SOCKET_ERROR)
+	{
+		printf("setsockopt failed SO_SNDBUF (open) with error %d\n", WSAGetLastError());
+		return -1;
+	}
+
 	while (attemptCount++ < MAX_SYN_ATTEMPT_COUNT) {
 		/*printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
 			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);*/
@@ -131,7 +152,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	return TIMEOUT;
 }
 
-int SenderSocket::Send(char *buf, int bytes) {
+int SenderSocket::Send_old(char *buf, int bytes) {
 	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
 		return NOT_CONNECTED;
 	}
@@ -139,7 +160,7 @@ int SenderSocket::Send(char *buf, int bytes) {
 	char *sendBuf = new char[bytes + sizeof(SenderDataHeader)];
 
 	SenderDataHeader senderDataHeader;
-	senderDataHeader.seq = send_seqnum;
+	senderDataHeader.seq = nextSeq;
 
 	memcpy(sendBuf, &senderDataHeader, sizeof(SenderDataHeader));
 	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
@@ -182,13 +203,13 @@ int SenderSocket::Send(char *buf, int bytes) {
 			}
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-			//printf("curr seq: %d, receiver ackseq: %d\n", send_seqnum, receiverHeader->ackSeq);
-			if (receiverHeader->ackSeq != send_seqnum + 1) {
+			//printf("curr seq: %d, receiver ackseq: %d\n", nextSeq, receiverHeader->ackSeq);
+			if (receiverHeader->ackSeq != nextSeq + 1) {
 				attempt_count--;
 				continue;
 			}
 
-			send_seqnum++;
+			nextSeq++;
 			
 			if (attempt_count == 1) {
 				float sample_time = (float)(timeGetTime() - time_before_recv) / 1000; //curr sample time in sec
@@ -218,7 +239,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, U
 	SenderSynHeader senderSyncHeader;
 	senderSyncHeader.sdh.flags.FIN = 1;
 	senderSyncHeader.sdh.flags.reserved = 0;
-	senderSyncHeader.sdh.seq = send_seqnum;
+	senderSyncHeader.sdh.seq = nextSeq;
 	senderSyncHeader.lp = *lp;
 
 	memcpy(buf_SendTo, &senderSyncHeader, sizeof(SenderSynHeader));
@@ -273,6 +294,123 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, U
 	}
 
 	return TIMEOUT;
+}
+
+void SenderSocket::Send(char *data, int size) {
+	HANDLE eventArr[] = {empty, eventQuit};
+
+	int res = WaitForMultipleObjects(2, eventArr, FALSE, INFINITE);
+	if (res != 0) {
+		//TODO: either eventQuit has come or -1. quit somehow, no processing to be done from here!
+	}
+	
+	//slot has space, lets fill it!
+	slot = nextSeq % W;
+	buffer[slot].size = size;
+	buffer[slot].sdh.flags.SYN = 0;
+	buffer[slot].sdh.seq = nextSeq++;
+	memcpy(buffer[slot].data, data, size);
+	SetEvent(full);
+}
+
+int SenderSocket::sendPacket(Packet packet) {
+	char *sendBuf = new char[MAX_PKT_SIZE];
+	memcpy(sendBuf, &packet.sdh, sizeof(SenderDataHeader));
+	memcpy(sendBuf + sizeof(SenderDataHeader), packet.data, packet.size);
+
+	if (sendto(sock, (char *)sendBuf, packet.size + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
+		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
+		printf("failed Send sendto with %d\n", WSAGetLastError());
+		return FAILED_SEND;
+	}
+	//TODO: release a semaphore/event 
+	return STATUS_OK;
+}
+
+void SenderSocket::WorkerRun() {
+	HANDLE events[] = {socketReceiveReady, full, allAcked};
+	DWORD timeout, timerExpire;
+	int nextToSend = 0;
+
+	while (true) {
+		/*if (nextSeq == lastAckSeq) //everything acknowledged
+			timeout = INFINITE;
+		else
+			timeout = timerExpire - timeGetTime();*/
+
+		int ret = WaitForMultipleObjects(2, events, false, 5000);
+
+		switch (ret) {
+			case WAIT_TIMEOUT:
+				sendPacket(buffer[slot]);
+				break;
+
+			case WAIT_OBJECT_0:
+				break;
+
+			case WAIT_OBJECT_0 + 1:// send packet
+				sendPacket(buffer[nextToSend % W]);
+				nextToSend++;
+				break;
+
+			case WAIT_OBJECT_0 + 2:
+				break;
+				//TODO: handle other cases and also sendPacket case properly
+			//default: //TODO: What to do
+		}
+
+		//calculate timeout
+	}
+}
+
+int SenderSocket::ACKThread() {
+	int attempt = 0;
+	while (true) {
+		fd_set sockHolder;
+		FD_ZERO(&sockHolder);
+		FD_SET(sock, &sockHolder);
+		struct timeval timeout;
+		int milliseconds = RTO * 1000;
+		timeout.tv_sec = milliseconds / 1000;
+		timeout.tv_usec = (milliseconds % 1000) * 1000;
+
+		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
+
+		if (s_res > 0) {
+			char *answBuf = new char[sizeof(ReceiverHeader)];
+			int recv_res;
+			int response_size = sizeof(sock_server);
+
+			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
+				printf("failed recvfrom with %d\n", WSAGetLastError());
+			}
+
+			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+			//printf("received ACK for %d\n", receiverHeader->ackSeq);
+			if (receiverHeader->ackSeq > sendBase) {
+				int diff = receiverHeader->ackSeq - sendBase;
+				sendBase = receiverHeader->ackSeq;
+				
+				ReleaseSemaphore(empty, diff, NULL);
+				attempt = 0;
+			}
+
+			else if (receiverHeader->ackSeq == sendBase) {
+				attempt++;
+				if (attempt == 3) {
+					//TODO: triple duplicate case handle it!
+				}
+			}
+		}
+
+		/*if(sendBase > 80)
+			printf("ACK thread sendBase %d\n", sendBase);*/
+		if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
+			break;
+	}
+	SetEvent(allAcked);
+	return 1;
 }
 
 SenderSocket::~SenderSocket()

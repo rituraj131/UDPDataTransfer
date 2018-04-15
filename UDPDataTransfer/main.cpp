@@ -5,7 +5,8 @@
 
 bool isCloseCalled = false;
 void statsThread(SenderSocket *, UINT64 *, DWORD, DWORD);
-void printStatsOneLastTime(SenderSocket *, UINT64 *, DWORD, DWORD);
+void workerThread(SenderSocket *);
+void ACKThread(SenderSocket *);
 
 int main(int argc, char **argv) {
 	if (argc != 8) {
@@ -47,7 +48,7 @@ int main(int argc, char **argv) {
 	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
 	lp.pLoss[RETURN_PATH] = atof(argv[6]);
 	lp.bufferSize = senderWindow;
-	SenderSocket ss;
+	SenderSocket ss(senderWindow);
 	int status;
 
 	time = timeGetTime();
@@ -70,15 +71,17 @@ int main(int argc, char **argv) {
 	DWORD statStartTime = timeGetTime();
 
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
-	
+	thread workerThread(workerThread, &ss);
+	thread ACkThread(ACKThread, &ss);
+
 	DWORD sendStartTime = timeGetTime();
+	int count = 0;
 	while (off < byteBufferSize)
 	{
 		// decide the size of next chunk
 		int bytes = min(byteBufferSize - off, MAX_PKT_SIZE - sizeof(SenderDataHeader));
-		if (bytes <= 0) break;
-		// send chunk into socket 
-		status = ss.Send(charBuf + off, bytes);
+		status = 0;
+		ss.Send(charBuf + off, bytes);
 
 		if (status != STATUS_OK) {
 			printf("Main:\send failed with status %d\n", status);
@@ -86,16 +89,20 @@ int main(int argc, char **argv) {
 			if (statsThread.joinable())
 				statsThread.join();
 			WSACleanup();
-			//system("pause");
+			system("pause");
 			return -1;
 		}
 
 		off += bytes;
+		count++;
 	}
+	
 	float totalSendTime = timeGetTime() - sendStartTime; //in ms
 	isCloseCalled = true;
-	
-	//printStatsOneLastTime(&ss, &off, time, statStartTime);
+	ss.allPacketsSent = true;
+
+	WaitForSingleObject(ss.allAcked, INFINITE);
+
 	Checksum cs;
 	UINT32 crc32_Close = 1;
 	if ((status = ss.Close(senderWindow, &lp, statStartTime, &crc32_Close)) != STATUS_OK) {
@@ -103,28 +110,40 @@ int main(int argc, char **argv) {
 		if (statsThread.joinable())
 			statsThread.join();
 		WSACleanup();
-		//system("pause");
+		system("pause");
 		return -1;
 	}
 
 	UINT32 crc32_recv = cs.CRC32((unsigned char *)charBuf, byteBufferSize);
 	
 	if (crc32_Close != crc32_recv) {
-		printf("Checums provided by reciver %X does not match to the checksum %X acroos the sent buffer\n", crc32_Close, crc32_recv);
+		printf("Checksum provided by receiver %X does not match to the checksum %X across the sent buffer\n", crc32_Close, crc32_recv);
 	}
 
-	float final_speed = (ss.send_seqnum * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / totalSendTime;
+	float final_speed = (ss.nextSeq * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / totalSendTime;
 	printf("Main:\ttransfer finished in %0.3f sec, %0.3f Kbps checksum %X\n", (float)totalSendTime / 1000, final_speed, 
 		crc32_recv);
 	printf("Main:\testRTT %0.3f, ideal rate %0.3f Kbps\n", ss.prev_est_RTT,
 		(MAX_PKT_SIZE)* 8/(ss.prev_est_RTT * 1000));
-	
+
 	if (statsThread.joinable())
 		statsThread.join();
+	if (workerThread.joinable())
+		workerThread.join();
+	if (ACkThread.joinable())
+		ACkThread.join();
 
 	WSACleanup();
-	//system("pause");
+	system("pause");
 	return 0;
+}
+
+void workerThread(SenderSocket *ss) {
+	ss->WorkerRun();
+}
+
+void ACKThread(SenderSocket *ss) {
+	ss->ACKThread();
 }
 
 void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {
@@ -138,19 +157,11 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 		float time_elapsed = (float)(timeGetTime() - time) / 1000;
 		float data_send = (float)*off/ 1000000; //MB
 		
-		int packets_sent = ss->send_seqnum - lastBase;
-		lastBase = ss->send_seqnum;
+		int packets_sent = ss->nextSeq - lastBase;
+		lastBase = ss->nextSeq;
 		float speed = (float)(packets_sent * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / (2* 1000000);
 		
-		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->send_seqnum,
-			data_send, ss->send_seqnum+1, ss->timeout_packet_count, speed, ss->prev_est_RTT);
+		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->nextSeq,
+			data_send, ss->nextSeq +1, ss->timeout_packet_count, speed, ss->prev_est_RTT);
 	}
-}
-
-void printStatsOneLastTime(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {
-	int data_send = *off / 1000000;
-	float speed = (data_send * 8) / (((float)timeGetTime() - startThreadTime) / 1000);
-	float RTT = 0.000f;
-	printf("[%d] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", (timeGetTime() - time)/1000, ss->send_seqnum,
-		(float)*off / 1000000, ss->send_seqnum + 1, ss->timeout_packet_count, speed, RTT);
 }
