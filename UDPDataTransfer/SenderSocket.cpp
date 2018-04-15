@@ -229,6 +229,7 @@ int SenderSocket::Send_old(char *buf, int bytes) {
 }
 
 int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, UINT32 *crc32_Close) {
+	printf("lets close this!\n");
 	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
 		return NOT_CONNECTED;
 	}
@@ -391,7 +392,8 @@ int SenderSocket::ACKThread() {
 			if (receiverHeader->ackSeq > sendBase) {
 				int diff = receiverHeader->ackSeq - sendBase;
 				sendBase = receiverHeader->ackSeq;
-				
+				if (receiverHeader->ackSeq == 90)
+					printf("90 aa gaya bhaiiiii %X\n", receiverHeader->recvWnd);
 				ReleaseSemaphore(empty, diff, NULL);
 				attempt = 0;
 			}
