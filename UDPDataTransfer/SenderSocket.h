@@ -13,6 +13,7 @@
 
 #define MAX_SYN_ATTEMPT_COUNT 3
 #define MAX_NONSYN_ATTEMPT_COUNT 5
+#define MAX_PACKET_TIMEOUT_COUNT 50
 
 #include "common.h"
 #include "TransferProp.h"
@@ -34,12 +35,12 @@ class SenderSocket
 	int lastAckSeq;
 	Packet *buffer;
 public:
-	bool allPacketsSent;
+	bool allPacketsSent, closerWorker;
 	float RTO;
 	DWORD time;
 	float prev_dev_RTT, prev_est_RTT;
 	int nextSeq, timeout_packet_count, goodput, slot, W, sendBase;
-	HANDLE empty, eventQuit, full, socketReceiveReady, allAcked;
+	HANDLE empty, eventQuit, full, socketReceiveReady, allAcked, closingWorker;
 	SenderSocket(int);
 	int Open(char *, int, int, LinkProperties *);
 	int Close(int, LinkProperties *, DWORD, UINT32 *);

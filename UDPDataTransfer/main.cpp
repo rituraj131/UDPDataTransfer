@@ -102,6 +102,8 @@ int main(int argc, char **argv) {
 	ss.allPacketsSent = true;
 
 	WaitForSingleObject(ss.allAcked, INFINITE);
+	//ResetEvent(ss.allAcked);
+	//SetEvent(ss.closingWorker);
 
 	Checksum cs;
 	UINT32 crc32_Close = 1;
