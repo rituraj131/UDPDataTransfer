@@ -28,6 +28,7 @@ SenderSocket::SenderSocket(int senderWindow)
 	allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
 	closingWorker = CreateEvent(NULL, TRUE, FALSE, "closingWorker");
 	buffer = new Packet[W];
+	timeArr = new DWORD[W];
 }
 
 int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties *lp) {
@@ -314,6 +315,9 @@ void SenderSocket::Send(char *data, int size) {
 	buffer[slot].sdh.flags.SYN = 0;
 	buffer[slot].sdh.seq = nextSeq++;
 	memcpy(buffer[slot].data, data, size);
+
+	timeArr[slot] = timeGetTime();
+
 	ReleaseSemaphore(full, 1, NULL);
 }
 
@@ -322,6 +326,10 @@ int SenderSocket::sendPacket(Packet packet) {
 	memcpy(sendBuf, &packet.sdh, sizeof(SenderDataHeader));
 	memcpy(sendBuf + sizeof(SenderDataHeader), packet.data, packet.size);
 	//printf("send packet seq no %d\n", packet.sdh.seq);
+
+	if (packet.sdh.seq == sendBase)
+		startTimer();
+
 	if (sendto(sock, (char *)sendBuf, packet.size + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
 		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());
@@ -346,7 +354,6 @@ void SenderSocket::WorkerRun() {
 			timeout = INFINITE;
 		else
 			timeout = timerExpire - timeGetTime();
-		timeout = 2000; //TODO: For the time being, remove it.
 
 		int ret = WaitForMultipleObjects(3, events, FALSE, timeout);
 		
@@ -390,7 +397,6 @@ void SenderSocket::WorkerRun() {
 
 		//calculate timeout
 	}
-	printf("Closing Worker Thread \n");
 
 	//if (thread_ACK.joinable())
 		//thread_ACK.join();
@@ -422,11 +428,18 @@ int SenderSocket::ACKThread() {
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			//printf("received ACK for %d\n", receiverHeader->ackSeq);
 			if (receiverHeader->ackSeq > sendBase) {
+				startTimer();
+
 				int diff = receiverHeader->ackSeq - sendBase;
 				sendBase = receiverHeader->ackSeq;
 				
 				if (attempt == 1) {
-					//TODO: devRTT, esRTT and RTO calculations as per sample RTT, from where sample RTT?
+					float sample_time = (float)(timeGetTime() - timeArr[sendBase%W]) / 1000; //curr sample time in sec
+					float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
+					float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
+					RTO = estimated_RTT + (float)4 * max(dev_RTT, 0.010f);
+					prev_dev_RTT = dev_RTT;
+					prev_est_RTT = estimated_RTT;
 				}
 
 				ReleaseSemaphore(empty, diff, NULL);
@@ -449,6 +462,10 @@ int SenderSocket::ACKThread() {
 	SetEvent(allAcked);
 	closerWorker = true;
 	return 1;
+}
+
+void SenderSocket::startTimer() {
+	timerExpire = timeGetTime() + RTO * 1000;
 }
 
 SenderSocket::~SenderSocket()

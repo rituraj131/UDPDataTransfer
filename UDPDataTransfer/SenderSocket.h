@@ -35,6 +35,8 @@ class SenderSocket
 	int lastAckSeq;
 	Packet *buffer;
 public:
+	DWORD *timeArr;
+	DWORD timerExpire;
 	bool allPacketsSent, closerWorker;
 	float RTO;
 	DWORD time;
@@ -49,6 +51,7 @@ public:
 	void WorkerRun();
 	int ACKThread();
 	int sendPacket(Packet);
+	void startTimer();
 	~SenderSocket();
 };
 

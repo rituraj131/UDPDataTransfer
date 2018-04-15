@@ -5,7 +5,7 @@
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>s3.irl.cs.tamu.edu 15 20 0.1 0.0 0.0 14</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>s3.irl.cs.tamu.edu 24 20 0.1 0.0 0.0 14</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>
