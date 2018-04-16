@@ -6,7 +6,6 @@
 bool isCloseCalled = false;
 void statsThread(SenderSocket *, UINT64 *, DWORD, DWORD);
 void workerThread(SenderSocket *);
-void ACKThread(SenderSocket *);
 
 int main(int argc, char **argv) {
 	if (argc != 8) {
@@ -52,7 +51,7 @@ int main(int argc, char **argv) {
 	int status;
 
 	time = timeGetTime();
-
+	
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
 		WSACleanup();
@@ -72,7 +71,6 @@ int main(int argc, char **argv) {
 
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
 	thread workerThread(workerThread, &ss);
-	//thread ACkThread(ACKThread, &ss);
 
 	DWORD sendStartTime = timeGetTime();
 	int count = 0;
@@ -102,7 +100,7 @@ int main(int argc, char **argv) {
 	ss.allPacketsSent = true;
 
 	WaitForSingleObject(ss.closingWorker, INFINITE);
-	
+	//printf("Main closing\n");
 	Checksum cs;
 	UINT32 crc32_Close = 1;
 	if ((status = ss.Close(senderWindow, &lp, statStartTime, &crc32_Close)) != STATUS_OK) {
@@ -130,8 +128,6 @@ int main(int argc, char **argv) {
 		statsThread.join();
 	if (workerThread.joinable())
 		workerThread.join();
-	//if (ACkThread.joinable())
-		//ACkThread.join();
 
 	WSACleanup();
 	system("pause");
@@ -140,10 +136,6 @@ int main(int argc, char **argv) {
 
 void workerThread(SenderSocket *ss) {
 	ss->WorkerRun();
-}
-
-void ACKThread(SenderSocket *ss) {
-	ss->ACKThread();
 }
 
 void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {

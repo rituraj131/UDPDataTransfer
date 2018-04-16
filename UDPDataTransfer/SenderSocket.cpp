@@ -13,15 +13,15 @@ SenderSocket::SenderSocket(int senderWindow)
 
 	RTO = 1.0f;
 	time = timeGetTime();
-	nextSeq = timeout_packet_count = goodput = lastAckSeq = sendBase = 0;
+	nextSeq = timeout_packet_count = goodput = sendBase = 0;
 	prev_dev_RTT = 0.0f;
 	prev_est_RTT = 1.0f;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
 	W = senderWindow;
 
-	empty = CreateSemaphore(NULL, senderWindow, senderWindow, NULL);
+	empty = CreateSemaphore(NULL, 0, W, NULL);
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
-	full = CreateSemaphore(NULL, 0, INT_MAX, NULL);
+	full = CreateSemaphore(NULL, 0, LONG_MAX, NULL);
 	socketReceiveReady = CreateEvent(NULL, TRUE, FALSE, "socketReceiveReady");
 	//allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
 	allPacketsACKed = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -143,6 +143,10 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
 			memcpy(&sock_server, &server, sizeof(struct sockaddr_in));
+			
+			lastReleased = min(W, receiverHeader->recvWnd);
+			//printf("lastReleased %d\n", lastReleased);
+			ReleaseSemaphore(empty, lastReleased, NULL);
 
 			//RTO = 3.0f * (float)(timeGetTime() - sendToTime)/1000; not needed anymore!
 
@@ -304,11 +308,12 @@ void SenderSocket::Send(char *data, int size) {
 	HANDLE eventArr[] = {empty, eventQuit};
 	
 	int res = WaitForMultipleObjects(2, eventArr, FALSE, INFINITE);
-	if (res == 1) { //workerr thread has asked to quit!
+	//printf("send() res %d\n", res);
+	if (res == 1) { //worker thread has asked to quit!
 		return;
 	}
 	//printf("send nextSeq %d\n", nextSeq);
-	//slot has space, lets fill it!
+	
 	slot = nextSeq % W;
 	buffer[slot].size = size;
 	buffer[slot].sdh.flags.SYN = 0;
@@ -325,7 +330,7 @@ int SenderSocket::sendPacket(Packet packet) {
 	memcpy(sendBuf, &packet.sdh, sizeof(SenderDataHeader));
 	memcpy(sendBuf + sizeof(SenderDataHeader), packet.data, packet.size);
 	//printf("send packet seq no %d\n", packet.sdh.seq);
-	//printf("sendPacket nextSeq %d\n", packet.sdh.seq);
+
 	if (packet.sdh.seq == sendBase)
 		startTimer();
 
@@ -339,7 +344,7 @@ int SenderSocket::sendPacket(Packet packet) {
 }
 
 void SenderSocket::WorkerRun() {
-	HANDLE events[] = {socketReceiveReady, full, closingWorker, allPacketsACKed};
+	HANDLE events[] = {socketReceiveReady, full, allPacketsACKed};
 	DWORD timeout;
 	DWORD timerExpire = timeGetTime();
 	int nextToSend = 0;
@@ -348,15 +353,15 @@ void SenderSocket::WorkerRun() {
 
 	thread thread_ACK(&SenderSocket::ACKThread, this);
 
-	while (true && !closeWorker) {
-		if (nextSeq == sendBase) //everything acknowledged
+	while (true) {
+		if (nextSeq == sendBase) //everything acknowledged till now
 			timeout = INFINITE;
 		else
 			timeout = timerExpire - timeGetTime();
 
-		int ret = WaitForMultipleObjects(4, events, FALSE, timeout);
-		
-		if (ret == 3) {//all acked
+		int ret = WaitForMultipleObjects(3, events, FALSE, timeout);
+		//printf("WorkerRun ret %d\n", ret);
+		if (ret == 2) {//all acked
 			SetEvent(closingWorker);
 			break;
 		}
@@ -437,8 +442,13 @@ void SenderSocket::ACKThread() {
 					prev_dev_RTT = dev_RTT;
 					prev_est_RTT = estimated_RTT;
 				}
+				
+				int effectiveWindow = min(W, receiverHeader->recvWnd);
+				int newReleased = sendBase + effectiveWindow - lastReleased;
+				
+				ReleaseSemaphore(empty, newReleased, NULL);
+				lastReleased += newReleased;
 
-				ReleaseSemaphore(empty, diff, NULL);
 				attempt = 1;
 			}
 
@@ -446,15 +456,15 @@ void SenderSocket::ACKThread() {
 				attempt++;
 				if (attempt == 3) {
 					//TODO: triple duplicate case handle it!
+					sendPacket(buffer[sendBase]);
 				}
 			}
 		}
 
-		/*if(sendBase > 80)
-			printf("ACK thread sendBase %d\n", sendBase);*/
 		if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
 			break;
 	}
+	
 	SetEvent(allPacketsACKed);
 }
 

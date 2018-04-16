@@ -32,7 +32,7 @@ class SenderSocket
 {
 	SOCKET sock;
 	struct sockaddr_in sock_server;
-	int lastAckSeq;
+	int lastReleased;
 	Packet *buffer;
 public:
 	DWORD *timeArr;
