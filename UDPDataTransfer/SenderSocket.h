@@ -41,7 +41,7 @@ public:
 	float RTO;
 	DWORD time;
 	float prev_dev_RTT, prev_est_RTT;
-	int nextSeq, timeout_packet_count, goodput, slot, W, sendBase;
+	int nextSeq, retrasmitted_pkt_count, goodput, slot, W, sendBase, fast_retransmit_count, effectiveWindow;
 	HANDLE empty, eventQuit, full, socketReceiveReady, allAcked, closingWorker, allPacketsACKed;
 	SenderSocket(int);
 	int Open(char *, int, int, LinkProperties *);

@@ -154,7 +154,8 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 		lastBase = ss->nextSeq;
 		float speed = (float)(packets_sent * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / (2* 1000000);
 		
-		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F 0 W 1 S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->nextSeq,
-			data_send, ss->nextSeq +1, ss->timeout_packet_count, speed, ss->prev_est_RTT);
+		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F %d W %d S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->nextSeq,
+			data_send, ss->nextSeq +1, ss->retrasmitted_pkt_count, ss->fast_retransmit_count, ss->effectiveWindow,
+			speed, ss->prev_est_RTT);
 	}
 }

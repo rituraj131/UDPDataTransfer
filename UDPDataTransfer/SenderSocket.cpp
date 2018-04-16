@@ -13,11 +13,11 @@ SenderSocket::SenderSocket(int senderWindow)
 
 	RTO = 1.0f;
 	time = timeGetTime();
-	nextSeq = timeout_packet_count = goodput = sendBase = 0;
 	prev_dev_RTT = 0.0f;
 	prev_est_RTT = 1.0f;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
 	W = senderWindow;
+	effectiveWindow = 1;
 
 	empty = CreateSemaphore(NULL, 0, W, NULL);
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
@@ -155,7 +155,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			return STATUS_OK;
 		}
 	}
-	timeout_packet_count++;
+	retrasmitted_pkt_count++;
 	return TIMEOUT;
 }
 
@@ -185,7 +185,7 @@ int SenderSocket::Send_old(char *buf, int bytes) {
 
 
 		if (attempt_count > 1)
-			timeout_packet_count++;
+			retrasmitted_pkt_count++;
 
 		fd_set sockHolder;
 		FD_ZERO(&sockHolder);
@@ -339,7 +339,7 @@ int SenderSocket::sendPacket(Packet packet) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());
 		return FAILED_SEND;
 	}
-	//TODO: release a semaphore/event 
+	
 	return STATUS_OK;
 }
 
@@ -382,7 +382,8 @@ void SenderSocket::WorkerRun() {
 				}
 
 				//TODO: check which pakcet to send
-				sendPacket(buffer[sendBase]);
+				sendPacket(buffer[sendBase%W]);
+				fast_retransmit_count++;
 				break;
 
 			case WAIT_OBJECT_0:
@@ -443,7 +444,7 @@ void SenderSocket::ACKThread() {
 					prev_est_RTT = estimated_RTT;
 				}
 				
-				int effectiveWindow = min(W, receiverHeader->recvWnd);
+				effectiveWindow = min(W, receiverHeader->recvWnd);
 				int newReleased = sendBase + effectiveWindow - lastReleased;
 				
 				ReleaseSemaphore(empty, newReleased, NULL);
@@ -456,7 +457,8 @@ void SenderSocket::ACKThread() {
 				attempt++;
 				if (attempt == 3) {
 					//TODO: triple duplicate case handle it!
-					sendPacket(buffer[sendBase]);
+					sendPacket(buffer[sendBase%W]);
+					retrasmitted_pkt_count++;
 				}
 			}
 		}
