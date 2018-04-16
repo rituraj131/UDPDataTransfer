@@ -21,11 +21,10 @@ SenderSocket::SenderSocket(int senderWindow)
 
 	empty = CreateSemaphore(NULL, senderWindow, senderWindow, NULL);
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
-	//full = CreateEvent(NULL, TRUE, FALSE, "full");
-	//empty = CreateEvent(NULL, TRUE, FALSE, "empty");
 	full = CreateSemaphore(NULL, 0, INT_MAX, NULL);
 	socketReceiveReady = CreateEvent(NULL, TRUE, FALSE, "socketReceiveReady");
-	allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
+	//allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
+	allPacketsACKed = CreateEvent(NULL, TRUE, FALSE, NULL);
 	closingWorker = CreateEvent(NULL, TRUE, FALSE, "closingWorker");
 	buffer = new Packet[W];
 	timeArr = new DWORD[W];
@@ -303,12 +302,12 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, U
 
 void SenderSocket::Send(char *data, int size) {
 	HANDLE eventArr[] = {empty, eventQuit};
-
+	
 	int res = WaitForMultipleObjects(2, eventArr, FALSE, INFINITE);
 	if (res == 1) { //workerr thread has asked to quit!
 		return;
 	}
-	
+	//printf("send nextSeq %d\n", nextSeq);
 	//slot has space, lets fill it!
 	slot = nextSeq % W;
 	buffer[slot].size = size;
@@ -326,7 +325,7 @@ int SenderSocket::sendPacket(Packet packet) {
 	memcpy(sendBuf, &packet.sdh, sizeof(SenderDataHeader));
 	memcpy(sendBuf + sizeof(SenderDataHeader), packet.data, packet.size);
 	//printf("send packet seq no %d\n", packet.sdh.seq);
-
+	//printf("sendPacket nextSeq %d\n", packet.sdh.seq);
 	if (packet.sdh.seq == sendBase)
 		startTimer();
 
@@ -340,26 +339,25 @@ int SenderSocket::sendPacket(Packet packet) {
 }
 
 void SenderSocket::WorkerRun() {
-	HANDLE events[] = {socketReceiveReady, full, closingWorker};
+	HANDLE events[] = {socketReceiveReady, full, closingWorker, allPacketsACKed};
 	DWORD timeout;
 	DWORD timerExpire = timeGetTime();
 	int nextToSend = 0;
 	int packet_timeout_count = 0; //to count specific packet's timeout count
 	int last_packet_timed_out = -1;
 
-	//thread thread_ACK(this->ACKThread);
+	thread thread_ACK(&SenderSocket::ACKThread, this);
 
-	while (true && !closerWorker) {
+	while (true && !closeWorker) {
 		if (nextSeq == sendBase) //everything acknowledged
 			timeout = INFINITE;
 		else
 			timeout = timerExpire - timeGetTime();
 
-		int ret = WaitForMultipleObjects(3, events, FALSE, timeout);
+		int ret = WaitForMultipleObjects(4, events, FALSE, timeout);
 		
-		if (ret == 2) {
-			printf("\n\nWorker Thread All Acked doen so exiting mannn\n");
-			//SetEvent(closingWorker);
+		if (ret == 3) {//all acked
+			SetEvent(closingWorker);
 			break;
 		}
 		
@@ -378,7 +376,8 @@ void SenderSocket::WorkerRun() {
 					break;
 				}
 
-				//sendPacket(buffer[sendBase]);
+				//TODO: check which pakcet to send
+				sendPacket(buffer[sendBase]);
 				break;
 
 			case WAIT_OBJECT_0:
@@ -388,21 +387,18 @@ void SenderSocket::WorkerRun() {
 				sendPacket(buffer[nextToSend % W]);
 				nextToSend++;
 				break;
-
-			case WAIT_OBJECT_0 + 2:
-				break;
+			
 				//TODO: handle other cases and also sendPacket case properly
 			//default: //TODO: What to do
 		}
 
 		//calculate timeout
 	}
-
-	//if (thread_ACK.joinable())
-		//thread_ACK.join();
+	if (thread_ACK.joinable())
+		thread_ACK.join();
 }
 
-int SenderSocket::ACKThread() {
+void SenderSocket::ACKThread() {
 	int attempt = 1;
 	while (true) {
 		fd_set sockHolder;
@@ -459,9 +455,7 @@ int SenderSocket::ACKThread() {
 		if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
 			break;
 	}
-	SetEvent(allAcked);
-	closerWorker = true;
-	return 1;
+	SetEvent(allPacketsACKed);
 }
 
 void SenderSocket::startTimer() {

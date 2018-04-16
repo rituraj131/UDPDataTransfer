@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
 	thread workerThread(workerThread, &ss);
-	thread ACkThread(ACKThread, &ss);
+	//thread ACkThread(ACKThread, &ss);
 
 	DWORD sendStartTime = timeGetTime();
 	int count = 0;
@@ -101,10 +101,8 @@ int main(int argc, char **argv) {
 	isCloseCalled = true;
 	ss.allPacketsSent = true;
 
-	WaitForSingleObject(ss.allAcked, INFINITE);
-	//ResetEvent(ss.allAcked);
-	//SetEvent(ss.closingWorker);
-
+	WaitForSingleObject(ss.closingWorker, INFINITE);
+	
 	Checksum cs;
 	UINT32 crc32_Close = 1;
 	if ((status = ss.Close(senderWindow, &lp, statStartTime, &crc32_Close)) != STATUS_OK) {
@@ -132,8 +130,8 @@ int main(int argc, char **argv) {
 		statsThread.join();
 	if (workerThread.joinable())
 		workerThread.join();
-	if (ACkThread.joinable())
-		ACkThread.join();
+	//if (ACkThread.joinable())
+		//ACkThread.join();
 
 	WSACleanup();
 	system("pause");
@@ -150,9 +148,10 @@ void ACKThread(SenderSocket *ss) {
 
 void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {
 	int lastBase = 0;
+	
 	while (true) {
 		Sleep(2000);
-
+		
 		if (isCloseCalled)
 			break;
 
