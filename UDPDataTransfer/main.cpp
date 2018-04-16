@@ -86,6 +86,8 @@ int main(int argc, char **argv) {
 			isCloseCalled = true;
 			if (statsThread.joinable())
 				statsThread.join();
+			if (workerThread.joinable())
+				workerThread.join();
 			WSACleanup();
 			system("pause");
 			return -1;
@@ -107,6 +109,8 @@ int main(int argc, char **argv) {
 		printf("Main:\tdisconnect failed with status %d\n", status);
 		if (statsThread.joinable())
 			statsThread.join();
+		if (workerThread.joinable())
+			workerThread.join();
 		WSACleanup();
 		system("pause");
 		return -1;

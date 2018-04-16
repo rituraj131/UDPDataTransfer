@@ -308,7 +308,7 @@ void SenderSocket::Send(char *data, int size) {
 	HANDLE eventArr[] = {empty, eventQuit};
 	
 	int res = WaitForMultipleObjects(2, eventArr, FALSE, INFINITE);
-	//printf("send() res %d\n", res);
+
 	if (res == 1) { //worker thread has asked to quit!
 		return;
 	}
@@ -428,7 +428,7 @@ void SenderSocket::ACKThread() {
 			}
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-			//printf("received ACK for %d\n", receiverHeader->ackSeq);
+			printf("received ACK for %d\n", receiverHeader->ackSeq);
 			if (receiverHeader->ackSeq > sendBase) {
 				startTimer();
 
@@ -466,7 +466,7 @@ void SenderSocket::ACKThread() {
 		if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
 			break;
 	}
-	
+	printf("all ack done\n");
 	SetEvent(allPacketsACKed);
 }
 
