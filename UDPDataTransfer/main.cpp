@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
 	LinkProperties lp;
 	lp.RTT = RTT;
-	lp.speed = 1000000 * atof(argv[7]); // convert to megabits
+	lp.speed = 100000.0f * atof(argv[7]); // convert to megabits
 	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
 	lp.pLoss[RETURN_PATH] = atof(argv[6]);
 	lp.bufferSize = senderWindow;
