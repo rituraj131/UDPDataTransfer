@@ -320,8 +320,6 @@ void SenderSocket::Send(char *data, int size) {
 	buffer[slot].sdh.seq = nextSeq++;
 	memcpy(buffer[slot].data, data, size);
 
-	timeArr[slot] = timeGetTime();
-
 	SetEvent(full);
 	//ReleaseSemaphore(full, 1, NULL);
 }
@@ -334,7 +332,7 @@ int SenderSocket::sendPacket(Packet packet) {
 
 	if (packet.sdh.seq == sendBase)
 		startTimer();
-
+	timeArr[packet.sdh.seq % W] = timeGetTime();
 	if (sendto(sock, (char *)sendBuf, packet.size + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
 		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());

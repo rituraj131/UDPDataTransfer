@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
 	
 	float totalSendTime = timeGetTime() - sendStartTime; //in ms
 	ss.allPacketsSent = true;
-
+	
 	WaitForSingleObject(ss.closingWorker, INFINITE);
 	isCloseCalled = true;
 	//printf("Main closing\n");
