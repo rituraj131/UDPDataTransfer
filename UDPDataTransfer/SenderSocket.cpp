@@ -21,7 +21,8 @@ SenderSocket::SenderSocket(int senderWindow)
 
 	empty = CreateSemaphore(NULL, 0, W, NULL);
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
-	full = CreateSemaphore(NULL, 0, LONG_MAX, NULL);
+	full = CreateEvent(NULL, TRUE, FALSE, "full");
+	//full = CreateSemaphore(NULL, 0, LONG_MAX, NULL);
 	socketReceiveReady = CreateEvent(NULL, TRUE, FALSE, "socketReceiveReady");
 	//allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
 	allPacketsACKed = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -236,11 +237,10 @@ int SenderSocket::Send_old(char *buf, int bytes) {
 }
 
 int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, UINT32 *crc32_Close) {
-	//printf("lets close this!\n");
 	if (sock_server.sin_port == INVALID_SOCKET) {//not yet Opened!
 		return NOT_CONNECTED;
 	}
-
+	printf("Close() function called\n");
 	lp->bufferSize += MAX_NONSYN_ATTEMPT_COUNT;
 
 	char *buf_SendTo = new char[sizeof(SenderSynHeader)];
@@ -322,7 +322,8 @@ void SenderSocket::Send(char *data, int size) {
 
 	timeArr[slot] = timeGetTime();
 
-	ReleaseSemaphore(full, 1, NULL);
+	SetEvent(full);
+	//ReleaseSemaphore(full, 1, NULL);
 }
 
 int SenderSocket::sendPacket(Packet packet) {
@@ -346,7 +347,7 @@ int SenderSocket::sendPacket(Packet packet) {
 void SenderSocket::WorkerRun() {
 	HANDLE events[] = {socketReceiveReady, full, allPacketsACKed};
 	DWORD timeout;
-	DWORD timerExpire = timeGetTime();
+	startTimer(); //initialize timerExpire
 	int nextToSend = 0;
 	int packet_timeout_count = 0; //to count specific packet's timeout count
 	int last_packet_timed_out = -1;
@@ -358,11 +359,10 @@ void SenderSocket::WorkerRun() {
 			timeout = INFINITE;
 		else
 			timeout = timerExpire - timeGetTime();
-
+		
 		int ret = WaitForMultipleObjects(3, events, FALSE, timeout);
 		//printf("WorkerRun ret %d\n", ret);
 		if (ret == 2) {//all acked
-			SetEvent(closingWorker);
 			break;
 		}
 		
@@ -390,6 +390,7 @@ void SenderSocket::WorkerRun() {
 				break;
 
 			case WAIT_OBJECT_0 + 1:// send packet
+				ResetEvent(full);
 				sendPacket(buffer[nextToSend % W]);
 				nextToSend++;
 				break;
@@ -402,6 +403,8 @@ void SenderSocket::WorkerRun() {
 	}
 	if (thread_ACK.joinable())
 		thread_ACK.join();
+	printf("Worker Thread closing\n");
+	SetEvent(closingWorker);
 }
 
 void SenderSocket::ACKThread() {
@@ -415,8 +418,8 @@ void SenderSocket::ACKThread() {
 		timeout.tv_sec = milliseconds / 1000;
 		timeout.tv_usec = (milliseconds % 1000) * 1000;
 
-		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
-
+		int s_res = select(0, NULL, &sockHolder, NULL, &timeout);
+		//printf("~~~~~~~~ACKThread s_res %d\n", s_res);
 		if (s_res > 0) {
 			char *answBuf = new char[sizeof(ReceiverHeader)];
 			int recv_res;
@@ -428,24 +431,23 @@ void SenderSocket::ACKThread() {
 			}
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-			printf("received ACK for %d\n", receiverHeader->ackSeq);
-			if (receiverHeader->ackSeq > sendBase) {
-				startTimer();
-
-				int diff = receiverHeader->ackSeq - sendBase;
-				sendBase = receiverHeader->ackSeq;
-				
+			//printf("~~~~~~received ACK for %d attempt %d sendbase %d\n", receiverHeader->ackSeq, attempt, sendBase);
+			if (receiverHeader->ackSeq > sendBase) {				
 				if (attempt == 1) {
-					float sample_time = (float)(timeGetTime() - timeArr[sendBase%W]) / 1000; //curr sample time in sec
+					float sample_time = (float)(timeGetTime() - timeArr[(receiverHeader->ackSeq-1) % W]) / 1000; //curr sample time in sec
 					float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
 					float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
 					RTO = estimated_RTT + (float)4 * max(dev_RTT, 0.010f);
+					//printf("setting RTO to %0.3f\n", RTO);
 					prev_dev_RTT = dev_RTT;
 					prev_est_RTT = estimated_RTT;
 				}
-				
+				//startTimer();
+				sendBase = receiverHeader->ackSeq;
+				//printf("ACKThread timerexpire %d recvWnd %d\n", timerExpire, receiverHeader->recvWnd);
 				effectiveWindow = min(W, receiverHeader->recvWnd);
 				int newReleased = sendBase + effectiveWindow - lastReleased;
+				int diff = receiverHeader->ackSeq - sendBase;
 				
 				ReleaseSemaphore(empty, newReleased, NULL);
 				lastReleased += newReleased;
@@ -455,10 +457,12 @@ void SenderSocket::ACKThread() {
 
 			else if (receiverHeader->ackSeq == sendBase) {
 				attempt++;
-				if (attempt == 3) {
+				if (attempt % 3 == 0) {
 					//TODO: triple duplicate case handle it!
 					sendPacket(buffer[sendBase%W]);
 					retrasmitted_pkt_count++;
+					//attempt = 1;
+
 				}
 			}
 		}
@@ -472,6 +476,7 @@ void SenderSocket::ACKThread() {
 
 void SenderSocket::startTimer() {
 	timerExpire = timeGetTime() + RTO * 1000;
+	//printf("RTO %0.3f startTimer():: timerExpire %d\n", RTO, timerExpire);
 }
 
 SenderSocket::~SenderSocket()

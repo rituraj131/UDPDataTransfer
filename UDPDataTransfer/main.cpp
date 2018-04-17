@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
 		WSACleanup();
-		//system("pause");
+		system("pause");
 		return -1;
 	}
 
@@ -69,6 +69,7 @@ int main(int argc, char **argv) {
 	UINT64 off = 0; // current position in buffer
 	DWORD statStartTime = timeGetTime();
 
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
 	thread workerThread(workerThread, &ss);
 
@@ -98,10 +99,10 @@ int main(int argc, char **argv) {
 	}
 	
 	float totalSendTime = timeGetTime() - sendStartTime; //in ms
-	isCloseCalled = true;
 	ss.allPacketsSent = true;
 
 	WaitForSingleObject(ss.closingWorker, INFINITE);
+	isCloseCalled = true;
 	//printf("Main closing\n");
 	Checksum cs;
 	UINT32 crc32_Close = 1;
@@ -144,10 +145,10 @@ void workerThread(SenderSocket *ss) {
 
 void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTime) {
 	int lastBase = 0;
-	
+	//printf("starting stats thread\n");
 	while (true) {
 		Sleep(2000);
-		
+		//printf("stats isCloseCalled %d\n", isCloseCalled);
 		if (isCloseCalled)
 			break;
 
