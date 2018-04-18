@@ -11,8 +11,8 @@
 #define TIMEOUT 5 // timeout after all retx attempts are exhausted
 #define FAILED_RECV 6 // recvfrom() failed in kernel
 
-#define MAX_SYN_ATTEMPT_COUNT 3
-#define MAX_NONSYN_ATTEMPT_COUNT 5
+#define MAX_SYN_ATTEMPT_COUNT 50
+#define MAX_NONSYN_ATTEMPT_COUNT 50
 #define MAX_PACKET_TIMEOUT_COUNT 50
 
 #include "common.h"
@@ -51,7 +51,6 @@ public:
 	void WorkerRun();
 	void ACKThread();
 	int sendPacket(Packet);
-	bool ReceiveACK();
 	void startTimer();
 	~SenderSocket();
 };

@@ -19,11 +19,10 @@ SenderSocket::SenderSocket(int senderWindow)
 	W = senderWindow;
 	effectiveWindow = 1;
 	lastAck = -1;
+	fast_retransmit_count = 0;
 	empty = CreateSemaphore(NULL, 0, W, NULL);
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
-	//full = CreateEvent(NULL, TRUE, FALSE, "full");
 	full = CreateSemaphore(NULL, 0, W, NULL);
-	socketReceiveReady = WSACreateEvent();
 
 	allPacketsACKed = CreateEvent(NULL, TRUE, FALSE, NULL);
 	closingWorker = CreateEvent(NULL, TRUE, FALSE, "closingWorker");
@@ -157,7 +156,6 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 			return STATUS_OK;
 		}
 	}
-	retrasmitted_pkt_count++;
 	return TIMEOUT;
 }
 
@@ -369,10 +367,10 @@ void SenderSocket::WorkerRun() {
 
 		switch (ret) {
 			case WAIT_TIMEOUT:
-				if (last_packet_attempted == nextToSend)
+				if (last_packet_attempted == sendBase)
 					packet_attempt_count++;
 				else {
-					last_packet_attempted = nextToSend;
+					last_packet_attempted = sendBase;
 					packet_attempt_count = 1;
 				}
 
@@ -393,6 +391,7 @@ void SenderSocket::WorkerRun() {
 
 				if(nextToSend%W == 0)
 					startTimer();
+				
 				nextToSend++;
 				break;
 		}
@@ -401,57 +400,6 @@ void SenderSocket::WorkerRun() {
 	if (thread_ACK.joinable())
 		thread_ACK.join();
 	SetEvent(closingWorker);
-}
-
-bool SenderSocket::ReceiveACK() {
-	char *answBuf = new char[sizeof(ReceiverHeader)];
-	int recv_res;
-	int response_size = sizeof(sock_server);
-
-	if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
-		(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
-		printf("failed recvfrom with %d\n", WSAGetLastError());
-	}
-
-	ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-	//printf("received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
-	
-	if (receiverHeader->ackSeq > sendBase) {
-		if (lastAckCount == 1) {
-			float sample_time = (float)(clock() - timeArr[(receiverHeader->ackSeq - 1) % W]) / 1000; //curr sample time in sec
-			float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
-			float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
-			RTO = estimated_RTT + (float)(4 * max(dev_RTT, 0.010f));
-			prev_dev_RTT = dev_RTT;
-			prev_est_RTT = estimated_RTT;
-		}
-		
-		sendBase = receiverHeader->ackSeq;
-		
-		effectiveWindow = min(W, receiverHeader->recvWnd);
-		int newReleased = sendBase + effectiveWindow - lastReleased;
-		int diff = receiverHeader->ackSeq - sendBase;
-
-		ReleaseSemaphore(empty, newReleased, NULL);
-		lastReleased += newReleased;
-
-		lastAck = sendBase;
-		lastAckCount = 1;
-
-		return true;
-	}
-
-	else if (receiverHeader->ackSeq == sendBase) {
-		lastAckCount++;
-		if (lastAckCount % 3 == 0) {
-			sendPacket(buffer[sendBase%W]);
-			fast_retransmit_count++;
-			return true;
-		}
-		lastAck = sendBase;
-	}
-
-	return false;
 }
 
 void SenderSocket::ACKThread() {
@@ -493,7 +441,7 @@ void SenderSocket::ACKThread() {
 		}
 
 		else if (receiverHeader->ackSeq == sendBase) {
-			if (attempt % 3 == 0) {
+			if (attempt >= 3 && attempt % 3 == 0) {
 				sendPacket(buffer[sendBase%W]);
 				fast_retransmit_count++;
 				startTimer();

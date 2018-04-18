@@ -69,7 +69,6 @@ int main(int argc, char **argv) {
 	UINT64 off = 0; // current position in buffer
 	DWORD statStartTime = clock();
 
-	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
 	thread workerThread(workerThread, &ss);
 
