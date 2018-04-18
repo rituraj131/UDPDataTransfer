@@ -41,7 +41,7 @@ public:
 	float RTO;
 	DWORD time;
 	float prev_dev_RTT, prev_est_RTT;
-	int nextSeq, retrasmitted_pkt_count, goodput, slot, W, sendBase, fast_retransmit_count, effectiveWindow;
+	int nextSeq, retrasmitted_pkt_count, goodput, slot, W, sendBase, fast_retransmit_count, effectiveWindow, lastAck, lastAckCount;
 	HANDLE empty, eventQuit, full, socketReceiveReady, allAcked, closingWorker, allPacketsACKed;
 	SenderSocket(int);
 	int Open(char *, int, int, LinkProperties *);
@@ -52,7 +52,7 @@ public:
 	void ACKThread();
 	int sendPacket(Packet);
 	void ReceiveACK_old();
-	void ReceiveACK();
+	bool ReceiveACK();
 	void startTimer();
 	~SenderSocket();
 };
