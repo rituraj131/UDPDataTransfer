@@ -98,10 +98,10 @@ int main(int argc, char **argv) {
 		count++;
 	}
 	
-	float totalSendTime = clock() - sendStartTime; //in ms
 	ss.allPacketsSent = true;
 	
 	WaitForSingleObject(ss.closingWorker, INFINITE);
+	float totalSendTime = clock() - sendStartTime; //in ms
 	isCloseCalled = true;
 	//printf("Main closing\n");
 	Checksum cs;
@@ -153,10 +153,10 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 			break;
 
 		float time_elapsed = (float)(clock() - time) / 1000;
-		float data_send = (float)*off/ 1000000; //MB
+		float data_send = (float)(ss->sendBase * (MAX_PKT_SIZE - sizeof(SenderDataHeader)))/1e6;
 		
-		int packets_sent = ss->nextSeq - lastBase;
-		lastBase = ss->nextSeq;
+		int packets_sent = ss->sendBase - lastBase;
+		lastBase = ss->sendBase;
 		float speed = (float)(packets_sent * 8 * (MAX_PKT_SIZE - sizeof(SenderDataHeader))) / (2* 1000000);
 		
 		printf("[%2.0f] B\t%6u (%0.1f MB) N\t%6u T %d F %d W %d S %0.3f Mbps RTT %0.3f\n", time_elapsed, ss->sendBase,

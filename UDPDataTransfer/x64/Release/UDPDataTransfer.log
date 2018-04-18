@@ -1,28 +1,18 @@
-﻿  SenderSocket.cpp
-SenderSocket.cpp(103): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-SenderSocket.cpp(109): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-SenderSocket.cpp(131): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-SenderSocket.cpp(149): warning C4018: '<': signed/unsigned mismatch
-SenderSocket.cpp(197): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-SenderSocket.cpp(225): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(226): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(276): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-SenderSocket.cpp(417): warning C4018: '>': signed/unsigned mismatch
-SenderSocket.cpp(420): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(421): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(429): warning C4018: '<': signed/unsigned mismatch
-SenderSocket.cpp(481): warning C4018: '>': signed/unsigned mismatch
-SenderSocket.cpp(484): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(485): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(494): warning C4018: '<': signed/unsigned mismatch
-SenderSocket.cpp(541): warning C4018: '>': signed/unsigned mismatch
-SenderSocket.cpp(544): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(545): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-SenderSocket.cpp(554): warning C4018: '<': signed/unsigned mismatch
-SenderSocket.cpp(581): warning C4244: '=': conversion from 'float' to 'DWORD', possible loss of data
+﻿  main.cpp
+main.cpp(19): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+main.cpp(20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+main.cpp(21): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+main.cpp(31): warning C4244: '=': conversion from 'UINT64' to 'DWORD', possible loss of data
+main.cpp(46): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+main.cpp(47): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+main.cpp(48): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+main.cpp(81): warning C4244: 'initializing': conversion from 'UINT64' to 'int', possible loss of data
+main.cpp(86): warning C4129: 's': unrecognized character escape sequence
+main.cpp(104): warning C4244: 'initializing': conversion from 'unsigned long' to 'float', possible loss of data
+main.cpp(156): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
   Generating code
-  1 of 204 functions ( 0.5%) were compiled, the rest were copied from previous compilation.
+  2 of 204 functions ( 1.0%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   UDPDataTransfer.vcxproj -> C:\Users\rituraj131\Desktop\UDP\UDPDataTransfer\x64\Release\UDPDataTransfer.exe
