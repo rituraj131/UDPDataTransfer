@@ -22,7 +22,7 @@ SenderSocket::SenderSocket(int senderWindow)
 	empty = CreateSemaphore(NULL, 0, W, NULL);
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
 	//full = CreateEvent(NULL, TRUE, FALSE, "full");
-	full = CreateSemaphore(NULL, 0, LONG_MAX, NULL);
+	full = CreateSemaphore(NULL, 0, W, NULL);
 	socketReceiveReady = WSACreateEvent();
 
 	allPacketsACKed = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -404,10 +404,10 @@ void SenderSocket::WorkerRun() {
 
 				sendPacket(buffer[nextToSend % W]);
 				//printf("[%0.3f] --> %d (Attempt %d of 50, RTO %0.3f timer expires @ %0.3f)\n", (float)(clock() - time) / 1000, nextToSend + 1,packet_timeout_count, RTO, (float)(timerExpire)/1000);
-				//ResetEvent(full);
 
 				if (nextToSend%W == 0)
-					shallRecomputeTimer = true;
+					startTimer();
+
 				nextToSend++;
 				break;
 		}
@@ -546,70 +546,54 @@ void SenderSocket::ReceiveACK_old() {
 void SenderSocket::ACKThread() {
 	int attempt = 1;
 	while (true) {
-		fd_set sockHolder;
-		FD_ZERO(&sockHolder);
-		FD_SET(sock, &sockHolder);
-		struct timeval timeout;
-		int milliseconds = RTO * 1000;
-		timeout.tv_sec = milliseconds / 1000;
-		timeout.tv_usec = (milliseconds % 1000) * 1000;
 
-		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
-		//printf("~~~~~~~~ACKThread s_res %d\n", s_res);
+		char *answBuf = new char[sizeof(ReceiverHeader)];
+		int recv_res;
+		int response_size = sizeof(sock_server);
 
-		if (s_res > 0) {
-			char *answBuf = new char[sizeof(ReceiverHeader)];
-			int recv_res;
-			int response_size = sizeof(sock_server);
+		if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+			(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
+			printf("failed recvfrom with %d\n", WSAGetLastError());
+		}
 
-			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
-				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
-				printf("failed recvfrom with %d\n", WSAGetLastError());
+		ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+		//printf("received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
+		if (receiverHeader->ackSeq > sendBase) {
+			if (attempt == 1) {
+				float sample_time = (float)(clock() - timeArr[(receiverHeader->ackSeq - 1) % W]) / 1000; //curr sample time in sec
+				float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
+				float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
+				RTO = estimated_RTT + (float)(4 * max(dev_RTT, 0.010f));
+				//printf("setting RTO to %0.3f\n", RTO);
+				prev_dev_RTT = dev_RTT;
+				prev_est_RTT = estimated_RTT;
 			}
+			startTimer();
+			sendBase = receiverHeader->ackSeq;
+			
+			effectiveWindow = min(W, receiverHeader->recvWnd);
+			int newReleased = sendBase + effectiveWindow - lastReleased;
+			int diff = receiverHeader->ackSeq - sendBase;
 
-			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-			//printf("received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
-			if (receiverHeader->ackSeq > sendBase) {				
-				if (attempt == 1) {
-					float sample_time = (float)(clock() - timeArr[(receiverHeader->ackSeq-1) % W]) / 1000; //curr sample time in sec
-					float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
-					float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
-					RTO = estimated_RTT + (float)(4 * max(dev_RTT, 0.010f));
-					//printf("setting RTO to %0.3f\n", RTO);
-					prev_dev_RTT = dev_RTT;
-					prev_est_RTT = estimated_RTT;
-				}
+			ReleaseSemaphore(empty, newReleased, NULL);
+			lastReleased += newReleased;
+			//printf("[%0.3f] <-- ACK %d window %d\n", (float)(clock() - time)/1000, sendBase, effectiveWindow);
+			attempt = 1;
+		}
+
+		else if (receiverHeader->ackSeq == sendBase) {
+			if (attempt % 3 == 0) {
+				sendPacket(buffer[sendBase%W]);
+				fast_retransmit_count++;
 				startTimer();
-				sendBase = receiverHeader->ackSeq;
-				//printf("ACKThread timerexpire %d recvWnd %d\n", timerExpire, receiverHeader->recvWnd);
-				effectiveWindow = min(W, receiverHeader->recvWnd);
-				int newReleased = sendBase + effectiveWindow - lastReleased;
-				int diff = receiverHeader->ackSeq - sendBase;
-				
-				ReleaseSemaphore(empty, newReleased, NULL);
-				lastReleased += newReleased;
-				//printf("[%0.3f] <-- ACK %d window %d\n", (float)(clock() - time)/1000, sendBase, effectiveWindow);
-				attempt = 1;
 			}
-
-			else if (receiverHeader->ackSeq == sendBase) {
-				attempt++;
-				if (attempt % 3 == 0) {
-					//TODO: triple duplicate case handle it!
-					
-					sendPacket(buffer[sendBase%W]);
-					fast_retransmit_count++;
-					//startTimer();
-					//attempt = 1;
-
-				}
-			}
+			attempt++;
 		}
 
 		if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
 			break;
 	}
-	printf("all ack done\n");
+	//printf("all ack done\n");
 	SetEvent(allPacketsACKed);
 }
 
