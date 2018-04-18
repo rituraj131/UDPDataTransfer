@@ -12,7 +12,7 @@ SenderSocket::SenderSocket(int senderWindow)
 	}
 
 	RTO = 1.0f;
-	time = timeGetTime();
+	time = clock();
 	prev_dev_RTT = 0.0f;
 	prev_est_RTT = 1.0f;
 	memset(&sock_server, 0, sizeof(struct sockaddr_in));
@@ -23,10 +23,11 @@ SenderSocket::SenderSocket(int senderWindow)
 	eventQuit = CreateEvent(NULL, TRUE, FALSE, "eventQuit");
 	full = CreateEvent(NULL, TRUE, FALSE, "full");
 	//full = CreateSemaphore(NULL, 0, LONG_MAX, NULL);
-	socketReceiveReady = CreateEvent(NULL, TRUE, FALSE, "socketReceiveReady");
-	//allAcked = CreateEvent(NULL, TRUE, FALSE, "allAcked");
+	socketReceiveReady = WSACreateEvent();
+
 	allPacketsACKed = CreateEvent(NULL, TRUE, FALSE, NULL);
 	closingWorker = CreateEvent(NULL, TRUE, FALSE, "closingWorker");
+
 	buffer = new Packet[W];
 	timeArr = new DWORD[W];
 }
@@ -61,7 +62,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 	{
 		// if not a valid IP, then do a DNS lookup
 		if ((remote = gethostbyname(host)) == NULL){
-			printf("[%0.3f] --> target %s is invalid\n", (float)(timeGetTime() - time) / 1000, host);
+			printf("[%0.3f] --> target %s is invalid\n", (float)(clock() - time) / 1000, host);
 			return INVALID_NAME;
 		}
 		else // take the first IP address and copy into sin_addr
@@ -116,7 +117,7 @@ int SenderSocket::Open(char *host, int port_no, int senderWindow, LinkProperties
 		/*printf("[%0.3f] --> SYN %d (attempt %d of %d, RTO %0.3f) to %s\n", (float)(timeGetTime() - time)/1000,
 			senderSyncHeader.sdh.seq, attemptCount, MAX_SYN_ATTEMPT_COUNT, RTO, address);*/
 		
-		DWORD sendToTime = timeGetTime();
+		DWORD sendToTime = clock();
 		fd_set sockHolder;
 		FD_ZERO(&sockHolder);
 		FD_SET(sock, &sockHolder);
@@ -173,7 +174,7 @@ int SenderSocket::Send_old(char *buf, int bytes) {
 	memcpy(sendBuf, &senderDataHeader, sizeof(SenderDataHeader));
 	memcpy(sendBuf + sizeof(SenderDataHeader), buf, bytes);
 	
-	DWORD time_before_recv = timeGetTime();
+	DWORD time_before_recv = clock();
 
 	int attempt_count = 0;
 
@@ -220,7 +221,7 @@ int SenderSocket::Send_old(char *buf, int bytes) {
 			nextSeq++;
 			
 			if (attempt_count == 1) {
-				float sample_time = (float)(timeGetTime() - time_before_recv) / 1000; //curr sample time in sec
+				float sample_time = (float)(clock() - time_before_recv) / 1000; //curr sample time in sec
 				float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
 				float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
 				RTO = estimated_RTT + (float) 4 * max(dev_RTT, 0.010f);
@@ -291,7 +292,7 @@ int SenderSocket::Close(int senderWindow, LinkProperties *lp, DWORD startTime, U
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
 			if (receiverHeader->flags.ACK != 1) continue;
 
-			printf("[%2.2f] <-- FIN-ACK %d window %X\n", (float)(timeGetTime() - startTime) / 1000, receiverHeader->ackSeq, receiverHeader->recvWnd);
+			printf("[%2.2f] <-- FIN-ACK %d window %X\n", (float)(clock() - startTime) / 1000, receiverHeader->ackSeq, receiverHeader->recvWnd);
 			/*printf("[%0.3f] <-- FIN-ACK %d window %d\n", (float)(timeGetTime() - time) / 1000,
 				senderSyncHeader.sdh.seq, receiverHeader->recvWnd);*/
 
@@ -330,10 +331,11 @@ int SenderSocket::sendPacket(Packet packet) {
 	memcpy(sendBuf + sizeof(SenderDataHeader), packet.data, packet.size);
 	//if(packet.sdh.seq == 90)
 		//printf("send packet seq no %d\n", packet.sdh.seq);
-
+	//printf("sendPacket() seq %d\n", packet.sdh.seq);
 	if (packet.sdh.seq == sendBase)
 		startTimer();
-	timeArr[packet.sdh.seq % W] = timeGetTime();
+
+	timeArr[packet.sdh.seq % W] = clock();
 	if (sendto(sock, (char *)sendBuf, packet.size + sizeof(SenderDataHeader), 0, (struct sockaddr *)&sock_server,
 		sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
 		printf("failed Send sendto with %d\n", WSAGetLastError());
@@ -344,6 +346,9 @@ int SenderSocket::sendPacket(Packet packet) {
 }
 
 void SenderSocket::WorkerRun() {
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+	WSAEventSelect(sock, socketReceiveReady, FD_READ);
+
 	HANDLE events[] = {socketReceiveReady, full, allPacketsACKed};
 	DWORD timeout;
 	startTimer(); //initialize timerExpire
@@ -351,16 +356,18 @@ void SenderSocket::WorkerRun() {
 	int packet_timeout_count = 0; //to count specific packet's timeout count
 	int last_packet_timed_out = -1;
 
-	thread thread_ACK(&SenderSocket::ACKThread, this);
+	//thread thread_ACK(&SenderSocket::ACKThread, this);
 
 	while (true) {
 		if (nextSeq == sendBase) //everything acknowledged till now
 			timeout = INFINITE;
 		else
-			timeout = timerExpire - timeGetTime();
-		//printf("WorkerRUn() timeout %d\n", timeout);
+			timeout = timerExpire - clock();
+		
+		//printf("WorkerRun() timeout %d\n", timeout);
+
 		int ret = WaitForMultipleObjects(3, events, FALSE, timeout);
-		//printf("WorkerRun ret %d\n", ret);
+		
 		if (ret == 2) {//all acked
 			break;
 		}
@@ -380,30 +387,162 @@ void SenderSocket::WorkerRun() {
 					break;
 				}
 
-				//TODO: check which pakcet to send
 				sendPacket(buffer[sendBase%W]);
 				retrasmitted_pkt_count++;
 				break;
 
 			case WAIT_OBJECT_0:
+				ReceiveACK();
+				WSAResetEvent(socketReceiveReady);
+				//printf("socketReceiveReady\n");
 				break;
 
 			case WAIT_OBJECT_0 + 1:// send packet
+				packet_timeout_count = 1;
+				last_packet_timed_out = nextToSend;
+
+				printf("[%0.3f] --> %d (Attempt %d of 50, RTO %0.3f timer expires @ %0.3f)\n", (float)(clock() - time) / 1000, nextToSend + 1,
+					packet_timeout_count, RTO, (float)(timerExpire)/1000);
 				ResetEvent(full);
 				sendPacket(buffer[nextToSend % W]);
 				nextToSend++;
 				break;
-			
-				//TODO: handle other cases and also sendPacket case properly
-			//default: //TODO: What to do
 		}
 
 		//calculate timeout
 	}
-	if (thread_ACK.joinable())
-		thread_ACK.join();
+	//if (thread_ACK.joinable())
+		//thread_ACK.join();
 	printf("Worker Thread closing\n");
 	SetEvent(closingWorker);
+}
+
+void SenderSocket::ReceiveACK() {
+	int attempt = 0;//TODO
+
+	char *answBuf = new char[sizeof(ReceiverHeader)];
+	int recv_res;
+	int response_size = sizeof(sock_server);
+
+	if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+		(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
+		printf("failed recvfrom with %d\n", WSAGetLastError());
+	}
+
+	ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+	//printf("received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
+	if (receiverHeader->ackSeq > sendBase) {
+		if (attempt == 1) {
+			float sample_time = (float)(clock() - timeArr[(receiverHeader->ackSeq - 1) % W]) / 1000; //curr sample time in sec
+			float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
+			float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
+			RTO = estimated_RTT + (float)(4 * max(dev_RTT, 0.010f));
+			//printf("setting RTO to %0.3f\n", RTO);
+			prev_dev_RTT = dev_RTT;
+			prev_est_RTT = estimated_RTT;
+		}
+		startTimer();
+		sendBase = receiverHeader->ackSeq;
+		//printf("ACKThread timerexpire %d recvWnd %d\n", timerExpire, receiverHeader->recvWnd);
+		effectiveWindow = min(W, receiverHeader->recvWnd);
+		int newReleased = sendBase + effectiveWindow - lastReleased;
+		int diff = receiverHeader->ackSeq - sendBase;
+
+		ReleaseSemaphore(empty, newReleased, NULL);
+		lastReleased += newReleased;
+		printf("[%0.3f] <-- ACK %d window %d\n", (float)(clock() - time) / 1000, sendBase, effectiveWindow);
+		attempt = 1;
+
+		//break;
+	}
+
+	else if (receiverHeader->ackSeq == sendBase) {
+		//attempt++;
+		if (attempt % 3 == 0) {
+			//TODO: triple duplicate case handle it!
+
+			sendPacket(buffer[sendBase%W]);
+			fast_retransmit_count++;
+			//break;
+			//startTimer();
+			//attempt = 1;
+
+		}
+	}
+
+	if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
+		SetEvent(allPacketsACKed);
+}
+
+void SenderSocket::ReceiveACK_old() {
+	int attempt = 0;
+
+	/*while (attempt++ < MAX_NONSYN_ATTEMPT_COUNT) {
+		fd_set sockHolder;
+		FD_ZERO(&sockHolder);
+		FD_SET(sock, &sockHolder);
+		struct timeval timeout;
+		int milliseconds = RTO * 1000;
+		timeout.tv_sec = milliseconds / 1000;
+		timeout.tv_usec = (milliseconds % 1000) * 1000;*/
+
+		int s_res = 1;// select(0, &sockHolder, NULL, NULL, &timeout);
+		
+		if (s_res > 0) {
+			char *answBuf = new char[sizeof(ReceiverHeader)];
+			int recv_res;
+			int response_size = sizeof(sock_server);
+
+			if ((recv_res = recvfrom(sock, (char *)answBuf, sizeof(ReceiverHeader), 0,
+				(struct sockaddr*)&sock_server, &response_size)) == SOCKET_ERROR) {
+				printf("failed recvfrom with %d\n", WSAGetLastError());
+			}
+
+			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
+			//printf("received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
+			if (receiverHeader->ackSeq > sendBase) {
+				if (attempt == 1) {
+					float sample_time = (float)(clock() - timeArr[(receiverHeader->ackSeq - 1) % W]) / 1000; //curr sample time in sec
+					float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
+					float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
+					RTO = estimated_RTT + (float)(4 * max(dev_RTT, 0.010f));
+					//printf("setting RTO to %0.3f\n", RTO);
+					prev_dev_RTT = dev_RTT;
+					prev_est_RTT = estimated_RTT;
+				}
+				startTimer();
+				sendBase = receiverHeader->ackSeq;
+				//printf("ACKThread timerexpire %d recvWnd %d\n", timerExpire, receiverHeader->recvWnd);
+				effectiveWindow = min(W, receiverHeader->recvWnd);
+				int newReleased = sendBase + effectiveWindow - lastReleased;
+				int diff = receiverHeader->ackSeq - sendBase;
+
+				ReleaseSemaphore(empty, newReleased, NULL);
+				lastReleased += newReleased;
+				printf("[%0.3f] <-- ACK %d window %d\n", (float)(clock() - time) / 1000, sendBase, effectiveWindow);
+				attempt = 1;
+
+				//break;
+			}
+
+			else if (receiverHeader->ackSeq == sendBase) {
+				//attempt++;
+				if (attempt % 3 == 0) {
+					//TODO: triple duplicate case handle it!
+
+					sendPacket(buffer[sendBase%W]);
+					fast_retransmit_count++;
+					//break;
+					//startTimer();
+					//attempt = 1;
+
+				}
+			}
+		}
+	//}
+
+	if (allPacketsSent && sendBase == nextSeq) //ACKed all the packets!
+		SetEvent(allPacketsACKed);
 }
 
 void SenderSocket::ACKThread() {
@@ -416,9 +555,10 @@ void SenderSocket::ACKThread() {
 		int milliseconds = RTO * 1000;
 		timeout.tv_sec = milliseconds / 1000;
 		timeout.tv_usec = (milliseconds % 1000) * 1000;
-		//printf("setting RTO %0.3f\n", RTO);
+
 		int s_res = select(0, &sockHolder, NULL, NULL, &timeout);
 		//printf("~~~~~~~~ACKThread s_res %d\n", s_res);
+
 		if (s_res > 0) {
 			char *answBuf = new char[sizeof(ReceiverHeader)];
 			int recv_res;
@@ -430,10 +570,10 @@ void SenderSocket::ACKThread() {
 			}
 
 			ReceiverHeader *receiverHeader = (ReceiverHeader *)answBuf;
-			//printf("~~~~~~received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
+			//printf("received ACK for %d attempt %d sendbase %d RTO %0.3f\n", receiverHeader->ackSeq, attempt, sendBase, RTO);
 			if (receiverHeader->ackSeq > sendBase) {				
 				if (attempt == 1) {
-					float sample_time = (float)(timeGetTime() - timeArr[(receiverHeader->ackSeq-1) % W]) / 1000; //curr sample time in sec
+					float sample_time = (float)(clock() - timeArr[(receiverHeader->ackSeq-1) % W]) / 1000; //curr sample time in sec
 					float estimated_RTT = (float)(1 - ALPHA) * prev_est_RTT + ALPHA * sample_time;
 					float dev_RTT = (float)(1 - BETA) * prev_dev_RTT + BETA * abs(sample_time - estimated_RTT);
 					RTO = estimated_RTT + (float)(4 * max(dev_RTT, 0.010f));
@@ -450,7 +590,7 @@ void SenderSocket::ACKThread() {
 				
 				ReleaseSemaphore(empty, newReleased, NULL);
 				lastReleased += newReleased;
-				
+				printf("[%0.3f] <-- ACK %d window %d\n", (float)(clock() - time)/1000, sendBase, effectiveWindow);
 				attempt = 1;
 			}
 
@@ -458,7 +598,7 @@ void SenderSocket::ACKThread() {
 				attempt++;
 				if (attempt % 3 == 0) {
 					//TODO: triple duplicate case handle it!
-					//RTO *= 2;
+					
 					sendPacket(buffer[sendBase%W]);
 					fast_retransmit_count++;
 					//startTimer();
@@ -476,7 +616,7 @@ void SenderSocket::ACKThread() {
 }
 
 void SenderSocket::startTimer() {
-	timerExpire = timeGetTime() + RTO * 1000;
+	timerExpire = clock() + RTO * 1000;
 	//printf("RTO %0.3f startTimer():: timerExpire %d\n", RTO, timerExpire);
 }
 

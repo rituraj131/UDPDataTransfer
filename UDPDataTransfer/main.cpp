@@ -24,13 +24,13 @@ int main(int argc, char **argv) {
 	printf("Main:\tsender W= %d, RTT %0.3f sec, loss %g / %g, link %d Mbps\n", senderWindow, RTT, lossProbabForward, lossProbabReverse, bottleNeckSpeed);
 	printf("Main:\tinitializing DWORD array with 2^%d elements... ", power);
 
-	DWORD time = timeGetTime();
+	DWORD time = clock();
 	UINT64 dwordBufSize = (UINT64)1 << power;
 	DWORD *dwordBuf = new DWORD[dwordBufSize]; // user-requested buffer
 	for (UINT64 i = 0; i < dwordBufSize; i++) // required initialization
 		dwordBuf[i] = i;
 
-	printf("done in %d ms\n", timeGetTime() - time);
+	printf("done in %d ms\n", clock() - time);
 
 	WSADATA wsaData;
 
@@ -43,37 +43,37 @@ int main(int argc, char **argv) {
 
 	LinkProperties lp;
 	lp.RTT = RTT;
-	lp.speed = 100000.0f * atof(argv[7]); // convert to megabits
+	lp.speed = 1e6 * atof(argv[7]); // convert to megabits
 	lp.pLoss[FORWARD_PATH] = atof(argv[5]);
 	lp.pLoss[RETURN_PATH] = atof(argv[6]);
 	lp.bufferSize = senderWindow;
 	SenderSocket ss(senderWindow);
 	int status;
 
-	time = timeGetTime();
+	time = clock();
 	
 	if ((status = ss.Open(targetHost, MAGIC_PORT, senderWindow, &lp)) != STATUS_OK) {
 		printf("Main:\tconnect failed with status %d\n", status);
 		WSACleanup();
-		system("pause");
+		//system("pause");
 		return -1;
 	}
 
 	printf("Main:\tconnected to %s in %0.3f sec, pkt size %d bytes\n", targetHost, 
-		(float)(timeGetTime() - time)/1000, MAX_PKT_SIZE);
-	time = timeGetTime();
+		(float)(clock() - time)/1000, MAX_PKT_SIZE);
+	time = clock();
 
 	char *charBuf = (char*)dwordBuf; // this buffer goes into socket
 	UINT64 byteBufferSize = dwordBufSize << 2; // convert to bytes
 
 	UINT64 off = 0; // current position in buffer
-	DWORD statStartTime = timeGetTime();
+	DWORD statStartTime = clock();
 
 	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 	thread statsThread(statsThread, &ss, &off, time, statStartTime);
 	thread workerThread(workerThread, &ss);
 
-	DWORD sendStartTime = timeGetTime();
+	DWORD sendStartTime = clock();
 	int count = 0;
 	while (off < byteBufferSize)
 	{
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
 			if (workerThread.joinable())
 				workerThread.join();
 			WSACleanup();
-			system("pause");
+			//system("pause");
 			return -1;
 		}
 
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
 		count++;
 	}
 	
-	float totalSendTime = timeGetTime() - sendStartTime; //in ms
+	float totalSendTime = clock() - sendStartTime; //in ms
 	ss.allPacketsSent = true;
 	
 	WaitForSingleObject(ss.closingWorker, INFINITE);
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
 		if (workerThread.joinable())
 			workerThread.join();
 		WSACleanup();
-		system("pause");
+		//system("pause");
 		return -1;
 	}
 
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
 		workerThread.join();
 
 	WSACleanup();
-	system("pause");
+	//system("pause");
 	return 0;
 }
 
@@ -152,7 +152,7 @@ void statsThread(SenderSocket *ss, UINT64 *off, DWORD time, DWORD startThreadTim
 		if (isCloseCalled)
 			break;
 
-		float time_elapsed = (float)(timeGetTime() - time) / 1000;
+		float time_elapsed = (float)(clock() - time) / 1000;
 		float data_send = (float)*off/ 1000000; //MB
 		
 		int packets_sent = ss->nextSeq - lastBase;

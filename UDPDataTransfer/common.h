@@ -12,5 +12,6 @@
 #include <ws2tcpip.h>
 #include <algorithm>
 #include <thread>
+#include <time.h>
 
 using namespace std;

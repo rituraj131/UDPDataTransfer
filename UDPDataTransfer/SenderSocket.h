@@ -51,6 +51,8 @@ public:
 	void WorkerRun();
 	void ACKThread();
 	int sendPacket(Packet);
+	void ReceiveACK_old();
+	void ReceiveACK();
 	void startTimer();
 	~SenderSocket();
 };
