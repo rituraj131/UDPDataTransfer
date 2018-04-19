@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
 	printf("Main:\ttransfer finished in %0.3f sec, %0.3f Kbps checksum %X\n", (float)totalSendTime / 1000, final_speed, 
 		crc32_recv);
 	printf("Main:\testRTT %0.3f, ideal rate %0.3f Kbps\n", ss.prev_est_RTT,
-		(MAX_PKT_SIZE)* 8/(ss.prev_est_RTT * 1000));
+		(ss.W * (MAX_PKT_SIZE)* 8)/(ss.prev_est_RTT * 1000));
 
 	if (statsThread.joinable())
 		statsThread.join();
